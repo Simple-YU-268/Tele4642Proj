@@ -62,14 +62,13 @@
     <div class="container">
         <div class="header">
             <h1>Hotel WiFi Admin Panel</h1>
-            <p>System Management & Monitoring</p>
+            <p>Room Authentication System</p>
         </div>
 
         <div class="nav">
             <button onclick="showSection('dashboard')" class="active">Dashboard</button>
             <button onclick="showSection('rooms')">Room Management</button>
-            <button onclick="showSection('whitelist')">Whitelist</button>
-            <button onclick="showSection('traffic')">Traffic Monitor</button>
+            <button onclick="showSection('devices')">Devices</button>
             <button onclick="showSection('settings')">Settings</button>
         </div>
 
@@ -83,16 +82,16 @@
                         <div>Total Rooms</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number" id="active-devices">0</div>
-                        <div>Active Devices</div>
+                        <div class="stat-number" id="total-devices">0</div>
+                        <div>Total Devices</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number" id="total-traffic">0 GB</div>
-                        <div>Total Traffic</div>
+                        <div class="stat-number" id="total-users">0</div>
+                        <div>Active Users</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number" id="whitelist-count">0</div>
-                        <div>Whitelist Entries</div>
+                        <div class="stat-number" id="total-quota">0 GB</div>
+                        <div>Total Data Quota</div>
                     </div>
                 </div>
                 <button class="btn" onclick="refreshDashboard()">Refresh Data</button>
@@ -116,6 +115,8 @@
                         <tr>
                             <th>Room Number</th>
                             <th>Phone Last 4</th>
+                            <th>Data Quota (GB)</th>
+                            <th>Devices</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -124,51 +125,20 @@
                 </table>
             </div>
 
-            <!-- Whitelist Management -->
-            <div id="whitelist" class="section">
-                <h2>MAC Address Whitelist</h2>
-                <div class="form-group">
-                    <label>Add MAC Address</label>
-                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
-                        <input type="text" id="new-mac" placeholder="00:11:22:33:44:55">
-                        <button class="btn" onclick="addMAC()">Add to Whitelist</button>
-                    </div>
-                </div>
-
-                <h3>Current Whitelist</h3>
+            <!-- Devices Management -->
+            <div id="devices" class="section">
+                <h2>Connected Devices</h2>
+                <h3>All Registered Devices</h3>
                 <table>
                     <thead>
                         <tr>
+                            <th>Room Number</th>
                             <th>MAC Address</th>
-                            <th>Added Time</th>
-                            <th>Actions</th>
+                            <th>Data Quota (GB)</th>
+                            <th>Status</th>
                         </tr>
                     </thead>
-                    <tbody id="whitelist-table">
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Traffic Monitor -->
-            <div id="traffic" class="section">
-                <h2>Traffic Monitor</h2>
-                <div class="form-group">
-                    <label>Filter by MAC</label>
-                    <input type="text" id="traffic-filter" placeholder="Enter MAC address">
-                    <button class="btn" onclick="filterTraffic()">Filter</button>
-                </div>
-
-                <h3>Traffic Statistics</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>MAC Address</th>
-                            <th>Total Traffic</th>
-                            <th>Daily Traffic</th>
-                            <th>Last Update</th>
-                        </tr>
-                    </thead>
-                    <tbody id="traffic-table">
+                    <tbody id="devices-table">
                     </tbody>
                 </table>
             </div>
@@ -177,14 +147,8 @@
             <div id="settings" class="section">
                 <h2>System Settings</h2>
                 <div class="form-group">
-                    <label>SDN Controller URL</label>
-                    <input type="text" id="sdn-url" value="http://127.0.0.1:8080">
-                    <button class="btn" onclick="testConnection()">Test Connection</button>
-                </div>
-                
-                <div class="form-group">
-                    <label>Reset Daily Traffic</label>
-                    <button class="btn danger" onclick="resetDailyTraffic()">Reset Daily Stats</button>
+                    <label>System Status</label>
+                    <div id="system-status">Loading...</div>
                 </div>
                 
                 <div class="form-group">
@@ -197,7 +161,6 @@
 
     <script>
         const API = 'http://127.0.0.1:5000';
-        const SDN_API = 'http://127.0.0.1:8080';
 
         function showSection(section) {
             document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -207,8 +170,8 @@
             
             if (section === 'dashboard') loadDashboard();
             if (section === 'rooms') loadRooms();
-            if (section === 'whitelist') loadWhitelist();
-            if (section === 'traffic') loadTraffic();
+            if (section === 'devices') loadDevices();
+            if (section === 'settings') loadSettings();
         }
 
         async function loadDashboard() {
@@ -218,20 +181,23 @@
                 const roomsData = await roomsRes.json();
                 document.getElementById('total-rooms').textContent = Object.keys(roomsData.rooms).length;
 
-                // Load whitelist count
-                const whitelistRes = await fetch(`${SDN_API}/whitelist`);
-                const whitelistData = await whitelistRes.json();
-                document.getElementById('whitelist-count').textContent = whitelistData.data.whitelist.length;
+                // Load user data
+                const userRes = await fetch('user_data.json');
+                const userData = await userRes.json();
+                
+                let totalDevices = 0;
+                let totalUsers = Object.keys(userData.users).length;
+                let totalQuota = 0;
 
-                // Load traffic stats
-                const trafficRes = await fetch(`${SDN_API}/traffic`);
-                const trafficData = await trafficRes.json();
-                let totalTraffic = 0;
-                Object.values(trafficData.data.total).forEach(bytes => totalTraffic += bytes);
-                document.getElementById('total-traffic').textContent = (totalTraffic / (1024**3)).toFixed(2) + ' GB';
+                Object.values(userData.users).forEach(user => {
+                    totalDevices += user.devices.length;
+                    totalQuota += user.quota / (1024**3);
+                });
 
-                // Load active devices
-                document.getElementById('active-devices').textContent = Object.keys(trafficData.data.total).length;
+                document.getElementById('total-devices').textContent = totalDevices;
+                document.getElementById('total-users').textContent = totalUsers;
+                document.getElementById('total-quota').textContent = totalQuota.toFixed(2);
+                
             } catch (error) {
                 console.error('Error loading dashboard:', error);
             }
@@ -239,16 +205,23 @@
 
         async function loadRooms() {
             try {
-                const res = await fetch('room_auth.json');
-                const data = await res.json();
+                const roomsRes = await fetch('room_auth.json');
+                const roomsData = await roomsRes.json();
+                
+                const userRes = await fetch('user_data.json');
+                const userData = await userRes.json();
+                
                 const tbody = document.getElementById('rooms-table');
                 tbody.innerHTML = '';
                 
-                Object.entries(data.rooms).forEach(([room, phone]) => {
+                Object.entries(roomsData.rooms).forEach(([room, phone]) => {
+                    const user = userData.users[room] || { quota: 0, devices: [] };
                     const row = tbody.insertRow();
                     row.innerHTML = `
                         <td>${room}</td>
                         <td>${phone}</td>
+                        <td>${(user.quota / (1024**3)).toFixed(2)}</td>
+                        <td>${user.devices.length}</td>
                         <td>
                             <button class="btn danger" onclick="deleteRoom('${room}')">Delete</button>
                         </td>
@@ -259,48 +232,36 @@
             }
         }
 
-        async function loadWhitelist() {
+        async function loadDevices() {
             try {
-                const res = await fetch(`${SDN_API}/whitelist`);
-                const data = await res.json();
-                const tbody = document.getElementById('whitelist-table');
+                const userRes = await fetch('user_data.json');
+                const userData = await userRes.json();
+                
+                const tbody = document.getElementById('devices-table');
                 tbody.innerHTML = '';
                 
-                data.data.whitelist.forEach(mac => {
-                    const row = tbody.insertRow();
-                    row.innerHTML = `
-                        <td>${mac}</td>
-                        <td>${new Date().toLocaleString()}</td>
-                        <td>
-                            <button class="btn danger" onclick="removeMAC('${mac}')">Remove</button>
-                        </td>
-                    `;
+                Object.entries(userData.users).forEach(([room, user]) => {
+                    user.devices.forEach(mac => {
+                        const row = tbody.insertRow();
+                        row.innerHTML = `
+                            <td>${room}</td>
+                            <td>${mac}</td>
+                            <td>${(user.quota / (1024**3)).toFixed(2)}</td>
+                            <td>${user.quota > 0 ? 'Active' : 'Quota Exceeded'}</td>
+                        `;
+                    });
                 });
             } catch (error) {
-                console.error('Error loading whitelist:', error);
+                console.error('Error loading devices:', error);
             }
         }
 
-        async function loadTraffic() {
-            try {
-                const res = await fetch(`${SDN_API}/traffic`);
-                const data = await resRes.json();
-                const tbody = document.getElementById('traffic-table');
-                tbody.innerHTML = '';
-                
-                Object.entries(data.data.total).forEach(([mac, bytes]) => {
-                    const daily = data.data.daily[mac] || 0;
-                    const row = tbody.insertRow();
-                    row.innerHTML = `
-                        <td>${mac}</td>
-                        <td>${(bytes / (1024**3)).toFixed(2)} GB</td>
-                        <td>${(daily / (1024**3)).toFixed(2)} GB</td>
-                        <td>${new Date(data.data.lastUpdate * 1000).toLocaleString()}</td>
-                    `;
-                });
-            } catch (error) {
-                console.error('Error loading traffic:', error);
-            }
+        async function loadSettings() {
+            document.getElementById('system-status').innerHTML = `
+                <div class="success">✅ Room Authentication System Running</div>
+                <div>API Endpoint: ${API}</div>
+                <div>Data Files: room_auth.json, user_data.json</div>
+            `;
         }
 
         async function addRoom() {
@@ -319,13 +280,15 @@
                     body: JSON.stringify({ room_number: room, phone_last4: phone })
                 });
                 
-                if (res.ok) {
+                const data = await res.json();
+                if (data.status === 'success') {
                     alert('Room added successfully');
                     document.getElementById('new-room').value = '';
                     document.getElementById('new-phone').value = '';
                     loadRooms();
+                    loadDashboard();
                 } else {
-                    alert('Failed to add room');
+                    alert('Failed to add room: ' + data.message);
                 }
             } catch (error) {
                 alert('Error: ' + error.message);
@@ -334,106 +297,38 @@
 
         async function deleteRoom(room) {
             if (confirm(`Are you sure you want to delete room ${room}?`)) {
-                try {
-                    // Load current data
-                    const res = await fetch('room_auth.json');
-                    const data = await res.json();
-                    delete data.rooms[room];
-                    
-                    // Save updated data
-                    await fetch('room_auth.json', {
-                        method: 'PUT',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(data)
-                    });
-                    
-                    loadRooms();
-                } catch (error) {
-                    alert('Error deleting room: ' + error.message);
-                }
-            }
-        }
-
-        async function addMAC() {
-            const mac = document.getElementById('new-mac').value;
-            if (!mac) {
-                alert('Please enter a MAC address');
-                return;
-            }
-
-            try {
-                const res = await fetch(`${SDN_API}/addToWhitelist`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ mac: mac })
-                });
-                
-                if (res.ok) {
-                    alert('MAC address added to whitelist');
-                    document.getElementById('new-mac').value = '';
-                    loadWhitelist();
-                } else {
-                    alert('Failed to add MAC address');
-                }
-            } catch (error) {
-                alert('Error: ' + error.message);
-            }
-        }
-
-        async function removeMAC(mac) {
-            if (confirm(`Are you sure you want to remove ${mac}?`)) {
-                try {
-                    const res = await fetch(`${SDN_API}/removeFromWhitelist`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ mac: mac })
-                    });
-                    
-                    if (res.ok) {
-                        alert('MAC address removed from whitelist');
-                        loadWhitelist();
-                    } else {
-                        alert('Failed to remove MAC address');
-                    }
-                } catch (error) {
-                    alert('Error: ' + error.message);
-                }
-            }
-        }
-
-        async function testConnection() {
-            const url = document.getElementById('sdn-url').value;
-            try {
-                const res = await fetch(`${url}/whitelist`);
-                if (res.ok) {
-                    alert('Connection successful');
-                } else {
-                    alert('Connection failed');
-                }
-            } catch (error) {
-                alert('Connection error: ' + error.message);
+                alert('Manual deletion not implemented. Use room_auth.json file directly.');
             }
         }
 
         function exportData() {
-            const data = {
-                timestamp: new Date().toISOString(),
-                rooms: 'room_auth.json',
-                whitelist: 'whitelist.json',
-                traffic: 'traffic_stats.json'
-            };
-            
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'hotel_wifi_backup.json';
-            a.click();
-            URL.revokeObjectURL(url);
+            Promise.all([
+                fetch('room_auth.json').then(r => r.json()),
+                fetch('user_data.json').then(r => r.json())
+            ]).then(([rooms, users]) => {
+                const data = {
+                    timestamp: new Date().toISOString(),
+                    rooms: rooms,
+                    users: users
+                };
+                
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'hotel_wifi_system_backup.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            }).catch(error => {
+                alert('Error exporting data: ' + error.message);
+            });
         }
 
-        // Load dashboard on page load
+        // Load initial data
         loadDashboard();
+        loadRooms();
+        loadDevices();
+        loadSettings();
     </script>
 </body>
 </html>
