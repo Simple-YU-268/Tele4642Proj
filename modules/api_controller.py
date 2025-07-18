@@ -2,13 +2,24 @@
 
 from webob import Response
 import json
+try:
+    from ryu.app.wsgi import ControllerBase, route
+except ImportError:
+    # 为了本地开发环境兼容性
+    class ControllerBase:
+        def __init__(self, req, link, data, **config):
+            pass
+    
+    def route(name, path, methods=None):
+        def decorator(func):
+            return func
+        return decorator
 
 
-class APIController:
+class APIController(ControllerBase):
     """REST API控制器"""
     
     def __init__(self, req, link, data, **config):
-        from ryu.app.wsgi import ControllerBase
         super(APIController, self).__init__(req, link, data, **config)
         
         self.whitelistManager = data['whitelistManager']
@@ -85,14 +96,18 @@ class APIController:
             return self.createResponse(status=500, message=str(e))
 
 
-# 路由装饰器
-from ryu.app.wsgi import route
-
-APIController.route = route
-
 # 注册路由
-APIController.route('api', '/addToWhitelist', methods=['POST'])(APIController.addToWhitelist)
-APIController.route('api', '/removeFromWhitelist', methods=['POST'])(APIController.removeFromWhitelist)
-APIController.route('api', '/whitelist', methods=['GET'])(APIController.getWhitelist)
-APIController.route('api', '/traffic', methods=['GET'])(APIController.getTrafficStats)
-APIController.route('api', '/topUsers', methods=['GET'])(APIController.getTopUsers)
+try:
+    from ryu.app.wsgi import route
+    
+    APIController.route = route
+    
+    # 注册路由
+    APIController.route('api', '/addToWhitelist', methods=['POST'])(APIController.addToWhitelist)
+    APIController.route('api', '/removeFromWhitelist', methods=['POST'])(APIController.removeFromWhitelist)
+    APIController.route('api', '/whitelist', methods=['GET'])(APIController.getWhitelist)
+    APIController.route('api', '/traffic', methods=['GET'])(APIController.getTrafficStats)
+    APIController.route('api', '/topUsers', methods=['GET'])(APIController.getTopUsers)
+except ImportError:
+    # 如果ryu不可用，跳过路由注册
+    pass
