@@ -1,4 +1,17 @@
 {
-  "users": {},
-  "sessions": {}
+  "users": {
+    "101": {
+      "quota": 0,
+      "devices": [
+        "00:1A:2B:3C:4D:5E"
+      ],
+      "created_at": 1752853806
+    }
+  },
+  "sessions": {
+    "101_1234": {
+      "room_number": "101",
+      "login_time": 1752853806
+    }
+  }
 }
