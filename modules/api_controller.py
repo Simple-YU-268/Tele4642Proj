@@ -34,9 +34,9 @@ class APIController(ControllerBase):
             'data': data or {}
         }
         return Response(
-            body=json.dumps(response),
+            body=json.dumps(response).encode('utf-8'),
             status=status,
-            content_type='application/json'
+            content_type='application/json; charset=utf-8'
         )
     
     def addToWhitelist(self, req, **kwargs):

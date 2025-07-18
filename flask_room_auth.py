@@ -137,6 +137,12 @@ def connect_room_device():
     room_number = data.get('room_number')
     mac = data.get('mac')
     
+    # 验证MAC地址格式
+    import re
+    mac_pattern = re.compile(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$')
+    if not mac or not mac_pattern.match(mac):
+        return jsonify({'status': 'failure', 'message': 'Invalid MAC address format'}), 400
+    
     user_data = load_user_data()
     
     if room_number in user_data['users']:
@@ -145,16 +151,30 @@ def connect_room_device():
         
         # 添加到SDN白名单
         try:
-            response = requests.post(f'{RYU_CONTROLLER_URL}/addToWhitelist', json={'mac': mac})
+            response = requests.post(f'{RYU_CONTROLLER_URL}/addToWhitelist', json={'mac': mac}, timeout=5)
             if response.status_code == 200:
                 save_user_data(user_data)
                 return jsonify({'status': 'success', 'quota': user_data['users'][room_number]['quota']})
             else:
-                return jsonify({'status': 'failure', 'message': 'Failed to add to whitelist'}), 500
+                # 如果SDN控制器不可用，仍然记录设备但给出警告
+                save_user_data(user_data)
+                return jsonify({
+                    'status': 'success', 
+                    'quota': user_data['users'][room_number]['quota'],
+                    'warning': 'Device added locally, but SDN controller may be unavailable'
+                })
+        except requests.exceptions.RequestException:
+            # 网络错误或SDN控制器未运行
+            save_user_data(user_data)
+            return jsonify({
+                'status': 'success', 
+                'quota': user_data['users'][room_number]['quota'],
+                'warning': 'SDN controller unavailable - device added to local registry'
+            })
         except Exception as e:
             return jsonify({'status': 'failure', 'message': str(e)}), 500
     
-    return jsonify({'status': 'failure'}), 400
+    return jsonify({'status': 'failure', 'message': 'Room not found'}), 400
 
 @app.route('/get_room_quota', methods=['GET'])
 def get_room_quota():
