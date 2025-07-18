@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hotel WiFi - Admin Panel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            min-height: 100vh; padding: 20px;
+        }
+        .container { 
+            max-width: 1200px; margin: 0 auto; background: white; 
+            border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header { 
+            background: linear-gradient(135deg, #e74c3c, #c0392b); color: white;
+            padding: 30px; text-align: center;
+        }
+        .nav { 
+            background: #34495e; padding: 15px; display: flex; gap: 20px;
+            justify-content: center; flex-wrap: wrap;
+        }
+        .nav button {
+            background: #3498db; color: white; border: none; padding: 10px 20px;
+            border-radius: 5px; cursor: pointer; transition: background 0.3s;
+        }
+        .nav button:hover { background: #2980b9; }
+        .nav button.active { background: #e74c3c; }
+        .content { padding: 30px; }
+        .section { display: none; }
+        .section.active { display: block; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { 
+            width: 100%; padding: 10px; border: 1px solid #ddd; 
+            border-radius: 5px; font-size: 14px;
+        }
+        .btn { 
+            background: #3498db; color: white; border: none; padding: 10px 20px;
+            border-radius: 5px; cursor: pointer; transition: background 0.3s;
+        }
+        .btn:hover { background: #2980b9; }
+        .btn.danger { background: #e74c3c; }
+        .btn.danger:hover { background: #c0392b; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; font-weight: bold; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { 
+            background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center;
+        }
+        .stat-number { font-size: 24px; font-weight: bold; color: #3498db; }
+        .error { color: #e74c3c; }
+        .success { color: #27ae60; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Hotel WiFi Admin Panel</h1>
+            <p>System Management & Monitoring</p>
+        </div>
+
+        <div class="nav">
+            <button onclick="showSection('dashboard')" class="active">Dashboard</button>
+            <button onclick="showSection('rooms')">Room Management</button>
+            <button onclick="showSection('whitelist')">Whitelist</button>
+            <button onclick="showSection('traffic')">Traffic Monitor</button>
+            <button onclick="showSection('settings')">Settings</button>
+        </div>
+
+        <div class="content">
+            <!-- Dashboard -->
+            <div id="dashboard" class="section active">
+                <h2>System Dashboard</h2>
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-number" id="total-rooms">0</div>
+                        <div>Total Rooms</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="active-devices">0</div>
+                        <div>Active Devices</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="total-traffic">0 GB</div>
+                        <div>Total Traffic</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number" id="whitelist-count">0</div>
+                        <div>Whitelist Entries</div>
+                    </div>
+                </div>
+                <button class="btn" onclick="refreshDashboard()">Refresh Data</button>
+            </div>
+
+            <!-- Room Management -->
+            <div id="rooms" class="section">
+                <h2>Room Management</h2>
+                <div class="form-group">
+                    <label>Add New Room</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                        <input type="text" id="new-room" placeholder="Room Number">
+                        <input type="text" id="new-phone" placeholder="Phone Last 4 Digits">
+                        <button class="btn" onclick="addRoom()">Add Room</button>
+                    </div>
+                </div>
+
+                <h3>Current Rooms</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Room Number</th>
+                            <th>Phone Last 4</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rooms-table">
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Whitelist Management -->
+            <div id="whitelist" class="section">
+                <h2>MAC Address Whitelist</h2>
+                <div class="form-group">
+                    <label>Add MAC Address</label>
+                    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+                        <input type="text" id="new-mac" placeholder="00:11:22:33:44:55">
+                        <button class="btn" onclick="addMAC()">Add to Whitelist</button>
+                    </div>
+                </div>
+
+                <h3>Current Whitelist</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>MAC Address</th>
+                            <th>Added Time</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="whitelist-table">
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Traffic Monitor -->
+            <div id="traffic" class="section">
+                <h2>Traffic Monitor</h2>
+                <div class="form-group">
+                    <label>Filter by MAC</label>
+                    <input type="text" id="traffic-filter" placeholder="Enter MAC address">
+                    <button class="btn" onclick="filterTraffic()">Filter</button>
+                </div>
+
+                <h3>Traffic Statistics</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>MAC Address</th>
+                            <th>Total Traffic</th>
+                            <th>Daily Traffic</th>
+                            <th>Last Update</th>
+                        </tr>
+                    </thead>
+                    <tbody id="traffic-table">
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Settings -->
+            <div id="settings" class="section">
+                <h2>System Settings</h2>
+                <div class="form-group">
+                    <label>SDN Controller URL</label>
+                    <input type="text" id="sdn-url" value="http://127.0.0.1:8080">
+                    <button class="btn" onclick="testConnection()">Test Connection</button>
+                </div>
+                
+                <div class="form-group">
+                    <label>Reset Daily Traffic</label>
+                    <button class="btn danger" onclick="resetDailyTraffic()">Reset Daily Stats</button>
+                </div>
+                
+                <div class="form-group">
+                    <label>Export System Data</label>
+                    <button class="btn" onclick="exportData()">Export JSON</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = 'http://127.0.0.1:5000';
+        const SDN_API = 'http://127.0.0.1:8080';
+
+        function showSection(section) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+            document.getElementById(section).classList.add('active');
+            event.target.classList.add('active');
+            
+            if (section === 'dashboard') loadDashboard();
+            if (section === 'rooms') loadRooms();
+            if (section === 'whitelist') loadWhitelist();
+            if (section === 'traffic') loadTraffic();
+        }
+
+        async function loadDashboard() {
+            try {
+                // Load room count
+                const roomsRes = await fetch('room_auth.json');
+                const roomsData = await roomsRes.json();
+                document.getElementById('total-rooms').textContent = Object.keys(roomsData.rooms).length;
+
+                // Load whitelist count
+                const whitelistRes = await fetch(`${SDN_API}/whitelist`);
+                const whitelistData = await whitelistRes.json();
+                document.getElementById('whitelist-count').textContent = whitelistData.data.whitelist.length;
+
+                // Load traffic stats
+                const trafficRes = await fetch(`${SDN_API}/traffic`);
+                const trafficData = await trafficRes.json();
+                let totalTraffic = 0;
+                Object.values(trafficData.data.total).forEach(bytes => totalTraffic += bytes);
+                document.getElementById('total-traffic').textContent = (totalTraffic / (1024**3)).toFixed(2) + ' GB';
+
+                // Load active devices
+                document.getElementById('active-devices').textContent = Object.keys(trafficData.data.total).length;
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        async function loadRooms() {
+            try {
+                const res = await fetch('room_auth.json');
+                const data = await res.json();
+                const tbody = document.getElementById('rooms-table');
+                tbody.innerHTML = '';
+                
+                Object.entries(data.rooms).forEach(([room, phone]) => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td>${room}</td>
+                        <td>${phone}</td>
+                        <td>
+                            <button class="btn danger" onclick="deleteRoom('${room}')">Delete</button>
+                        </td>
+                    `;
+                });
+            } catch (error) {
+                console.error('Error loading rooms:', error);
+            }
+        }
+
+        async function loadWhitelist() {
+            try {
+                const res = await fetch(`${SDN_API}/whitelist`);
+                const data = await res.json();
+                const tbody = document.getElementById('whitelist-table');
+                tbody.innerHTML = '';
+                
+                data.data.whitelist.forEach(mac => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td>${mac}</td>
+                        <td>${new Date().toLocaleString()}</td>
+                        <td>
+                            <button class="btn danger" onclick="removeMAC('${mac}')">Remove</button>
+                        </td>
+                    `;
+                });
+            } catch (error) {
+                console.error('Error loading whitelist:', error);
+            }
+        }
+
+        async function loadTraffic() {
+            try {
+                const res = await fetch(`${SDN_API}/traffic`);
+                const data = await resRes.json();
+                const tbody = document.getElementById('traffic-table');
+                tbody.innerHTML = '';
+                
+                Object.entries(data.data.total).forEach(([mac, bytes]) => {
+                    const daily = data.data.daily[mac] || 0;
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td>${mac}</td>
+                        <td>${(bytes / (1024**3)).toFixed(2)} GB</td>
+                        <td>${(daily / (1024**3)).toFixed(2)} GB</td>
+                        <td>${new Date(data.data.lastUpdate * 1000).toLocaleString()}</td>
+                    `;
+                });
+            } catch (error) {
+                console.error('Error loading traffic:', error);
+            }
+        }
+
+        async function addRoom() {
+            const room = document.getElementById('new-room').value;
+            const phone = document.getElementById('new-phone').value;
+            
+            if (!room || !phone || phone.length !== 4) {
+                alert('Please enter valid room number and 4-digit phone code');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API}/add_room`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ room_number: room, phone_last4: phone })
+                });
+                
+                if (res.ok) {
+                    alert('Room added successfully');
+                    document.getElementById('new-room').value = '';
+                    document.getElementById('new-phone').value = '';
+                    loadRooms();
+                } else {
+                    alert('Failed to add room');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function deleteRoom(room) {
+            if (confirm(`Are you sure you want to delete room ${room}?`)) {
+                try {
+                    // Load current data
+                    const res = await fetch('room_auth.json');
+                    const data = await res.json();
+                    delete data.rooms[room];
+                    
+                    // Save updated data
+                    await fetch('room_auth.json', {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(data)
+                    });
+                    
+                    loadRooms();
+                } catch (error) {
+                    alert('Error deleting room: ' + error.message);
+                }
+            }
+        }
+
+        async function addMAC() {
+            const mac = document.getElementById('new-mac').value;
+            if (!mac) {
+                alert('Please enter a MAC address');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${SDN_API}/addToWhitelist`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ mac: mac })
+                });
+                
+                if (res.ok) {
+                    alert('MAC address added to whitelist');
+                    document.getElementById('new-mac').value = '';
+                    loadWhitelist();
+                } else {
+                    alert('Failed to add MAC address');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        async function removeMAC(mac) {
+            if (confirm(`Are you sure you want to remove ${mac}?`)) {
+                try {
+                    const res = await fetch(`${SDN_API}/removeFromWhitelist`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ mac: mac })
+                    });
+                    
+                    if (res.ok) {
+                        alert('MAC address removed from whitelist');
+                        loadWhitelist();
+                    } else {
+                        alert('Failed to remove MAC address');
+                    }
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
+            }
+        }
+
+        async function testConnection() {
+            const url = document.getElementById('sdn-url').value;
+            try {
+                const res = await fetch(`${url}/whitelist`);
+                if (res.ok) {
+                    alert('Connection successful');
+                } else {
+                    alert('Connection failed');
+                }
+            } catch (error) {
+                alert('Connection error: ' + error.message);
+            }
+        }
+
+        function exportData() {
+            const data = {
+                timestamp: new Date().toISOString(),
+                rooms: 'room_auth.json',
+                whitelist: 'whitelist.json',
+                traffic: 'traffic_stats.json'
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'hotel_wifi_backup.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Load dashboard on page load
+        loadDashboard();
+    </script>
+</body>
+</html>
