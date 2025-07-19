@@ -31,8 +31,8 @@ class HotelWifiController(app_manager.RyuApp):
         self.whitelistManager = WhitelistManager(self.logger)
         self.trafficMonitor = TrafficMonitor(self.logger)
         self.flowManager = FlowManager(self.logger)
-        self.quotaManager = QuotaManager(self.logger, self.trafficMonitor, 
-                                       self.flowManager, self.whitelistManager)
+        self.quotaManager = QuotaManager(self.logger, self.flowManager, 
+                                       self.whitelistManager)
         
         # 注册API控制器
         wsgi = kwargs['wsgi']
@@ -68,11 +68,8 @@ class HotelWifiController(app_manager.RyuApp):
             self.logger.info("MAC %s not in whitelist. Dropping packet.", srcMac)
             return
             
-        # 更新流量统计
-        self.trafficMonitor.updateTraffic(srcMac, len(msg.data))
-        
-        # 检查用户配额
-        if not self.quotaManager.monitorQuotaUsage(datapath, srcMac):
+        # 更新流量统计并检查配额
+        if not self.quotaManager.monitorQuotaUsage(datapath, srcMac, len(msg.data)):
             self.logger.info("User %s quota exceeded. Blocking access.", srcMac)
             return
             

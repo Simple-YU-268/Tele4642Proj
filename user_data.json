@@ -5,14 +5,16 @@
       "devices": [
         "00:1A:2B:3C:4D:5E"
       ],
-      "created_at": 1752853806
+      "created_at": 1752853806,
+      "used_traffic": 0
     },
     "102": {
       "quota": 0,
       "devices": [
         "00:1A:2B:3C:4D:5E"
       ],
-      "created_at": 1752856101
+      "created_at": 1752856101,
+      "used_traffic": 0
     }
   },
   "sessions": {

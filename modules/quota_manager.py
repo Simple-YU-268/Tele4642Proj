@@ -8,9 +8,8 @@ from threading import Lock
 class QuotaManager:
     """配额管理器 - 监控用户数据使用情况并控制网络访问"""
     
-    def __init__(self, logger, traffic_monitor, flow_manager, whitelist_manager):
+    def __init__(self, logger, flow_manager, whitelist_manager):
         self.logger = logger
-        self.trafficMonitor = traffic_monitor
         self.flowManager = flow_manager
         self.whitelistManager = whitelist_manager
         
@@ -37,27 +36,54 @@ class QuotaManager:
         except Exception as e:
             self.logger.error("Error saving user data: %s", str(e))
     
-    def checkUserQuota(self, mac_address):
-        """检查用户配额是否已用完"""
+    def getUserTraffic(self, mac_address):
+        """从user_data.json获取用户的流量使用情况"""
         user_data = self.loadUserData()
         
-        # 查找MAC地址对应的用户
         for room_number, user_info in user_data.get('users', {}).items():
             if mac_address in user_info.get('devices', []):
-                used_traffic = self.trafficMonitor.getTraffic(mac_address)
-                total_used = used_traffic.get('total', 0)
-                quota = user_info.get('quota', 0)
-                
-                self.logger.debug("User %s: quota=%d, used=%d", room_number, quota, total_used)
-                
-                if quota > 0 and total_used >= quota:
-                    self.logger.warning("User %s quota exceeded: %d/%d bytes", 
-                                      room_number, total_used, quota)
-                    return False  # 配额已用完
-                
-                return True  # 配额未用完
+                return {
+                    'room_number': room_number,
+                    'quota': user_info.get('quota', 0),
+                    'used': user_info.get('used_traffic', 0)
+                }
         
-        return True  # 未找到用户，允许访问
+        return None
+    
+    def updateUserTraffic(self, mac_address, bytes_count):
+        """更新用户在user_data.json中的流量使用"""
+        user_data = self.loadUserData()
+        
+        for room_number, user_info in user_data.get('users', {}).items():
+            if mac_address in user_info.get('devices', []):
+                current_used = user_info.get('used_traffic', 0)
+                user_info['used_traffic'] = current_used + bytes_count
+                
+                self.saveUserData(user_data)
+                self.logger.debug("Updated user %s traffic: +%d bytes (total: %d)", 
+                                room_number, bytes_count, user_info['used_traffic'])
+                return True
+        
+        return False
+    
+    def checkUserQuota(self, mac_address):
+        """检查用户配额是否已用完"""
+        user_info = self.getUserTraffic(mac_address)
+        if not user_info:
+            return True  # 未找到用户，允许访问
+        
+        quota = user_info['quota']
+        used = user_info['used']
+        
+        self.logger.debug("User %s: quota=%d, used=%d", 
+                        user_info['room_number'], quota, used)
+        
+        if quota > 0 and used >= quota:
+            self.logger.warning("User %s quota exceeded: %d/%d bytes", 
+                              user_info['room_number'], used, quota)
+            return False  # 配额已用完
+        
+        return True  # 配额未用完
     
     def blockUser(self, datapath, mac_address):
         """阻止用户网络访问"""
@@ -76,8 +102,12 @@ class QuotaManager:
         
         self.logger.info("Blocked user with MAC: %s", mac_address)
     
-    def monitorQuotaUsage(self, datapath, mac_address):
+    def monitorQuotaUsage(self, datapath, mac_address, bytes_count):
         """监控用户配额使用情况"""
+        # 更新流量使用
+        self.updateUserTraffic(mac_address, bytes_count)
+        
+        # 检查配额
         if not self.checkUserQuota(mac_address):
             self.blockUser(datapath, mac_address)
             return False
@@ -85,16 +115,17 @@ class QuotaManager:
     
     def getUserQuotaInfo(self, mac_address):
         """获取用户配额信息"""
+        return self.getUserTraffic(mac_address)
+    
+    def resetUserTraffic(self, mac_address):
+        """重置用户流量使用（用于测试或新周期）"""
         user_data = self.loadUserData()
         
         for room_number, user_info in user_data.get('users', {}).items():
             if mac_address in user_info.get('devices', []):
-                used_traffic = self.trafficMonitor.getTraffic(mac_address)
-                return {
-                    'room_number': room_number,
-                    'quota': user_info.get('quota', 0),
-                    'used': used_traffic.get('total', 0),
-                    'remaining': max(0, user_info.get('quota', 0) - used_traffic.get('total', 0))
-                }
+                user_info['used_traffic'] = 0
+                self.saveUserData(user_data)
+                self.logger.info("Reset traffic for user %s", room_number)
+                return True
         
-        return None
+        return False
