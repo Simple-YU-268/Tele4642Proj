@@ -14,6 +14,7 @@ from ryu.app.wsgi import WSGIApplication
 from modules.whitelist_manager import WhitelistManager
 from modules.traffic_monitor import TrafficMonitor
 from modules.flow_manager import FlowManager
+from modules.quota_manager import QuotaManager
 from modules.api_controller import APIController
 
 
@@ -30,6 +31,8 @@ class HotelWifiController(app_manager.RyuApp):
         self.whitelistManager = WhitelistManager(self.logger)
         self.trafficMonitor = TrafficMonitor(self.logger)
         self.flowManager = FlowManager(self.logger)
+        self.quotaManager = QuotaManager(self.logger, self.trafficMonitor, 
+                                       self.flowManager, self.whitelistManager)
         
         # 注册API控制器
         wsgi = kwargs['wsgi']
@@ -50,7 +53,7 @@ class HotelWifiController(app_manager.RyuApp):
         msg = ev.msg
         datapath = msg.datapath
         
-        # 解析数据包
+        # 解析数据
         from ryu.lib.packet import packet, ethernet
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
@@ -68,5 +71,10 @@ class HotelWifiController(app_manager.RyuApp):
         # 更新流量统计
         self.trafficMonitor.updateTraffic(srcMac, len(msg.data))
         
+        # 检查用户配额
+        if not self.quotaManager.monitorQuotaUsage(datapath, srcMac):
+            self.logger.info("User %s quota exceeded. Blocking access.", srcMac)
+            return
+            
         # 处理数据包转发
         self.flowManager.handlePacket(datapath, srcMac, dstMac, inPort, msg)
