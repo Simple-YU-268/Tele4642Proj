@@ -134,8 +134,28 @@ class QuotaManager:
         return True
     
     def getUserQuotaInfo(self, mac_address):
-        """获取用户配额信息"""
-        return self.getUserTraffic(mac_address)
+        """获取用户配额信息 - 修复MAC地址匹配"""
+        user_data = self.loadUserData()
+        
+        # 直接检查MAC地址是否在设备列表中
+        for room_number, user_info in user_data.get('users', {}).items():
+            devices = user_info.get('devices', [])
+            if mac_address in devices:
+                return {
+                    'room_number': room_number,
+                    'quota': user_info.get('quota', 0),
+                    'used_traffic': user_info.get('used_traffic', 0)
+                }
+        
+        # 特殊处理路由器MAC
+        if mac_address == "00:00:00:00:00:AA":
+            return {
+                'room_number': 'router',
+                'quota': 9223372036854775807,
+                'used_traffic': 0
+            }
+        
+        return None
     
     def resetUserTraffic(self, mac_address):
         """重置用户流量使用（用于测试或新周期）"""
