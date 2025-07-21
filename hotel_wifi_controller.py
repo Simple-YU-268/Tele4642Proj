@@ -49,11 +49,9 @@ class HotelWifiController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packetInHandler(self, ev):
-        """数据包处理入口 - 基于流表优先级的流量控制"""
+        """数据包处理入口 - 委托给flow_manager处理"""
         msg = ev.msg
         datapath = msg.datapath
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
         
         # 解析数据
         from ryu.lib.packet import packet, ethernet
@@ -65,38 +63,10 @@ class HotelWifiController(app_manager.RyuApp):
         inPort = msg.match['in_port']
         dpid = datapath.id
         
-        # 基于流表优先级的流量控制
+        # 获取用户配额信息
         user_info = self.quotaManager.getUserQuotaInfo(srcMac)
         
-        if user_info:
-            # 已注册设备
-            if user_info['quota'] > 0:
-                # 有配额 - 高优先级允许流表
-                match = parser.OFPMatch(eth_src=srcMac)
-                actions = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                self.flowManager.addFlow(datapath, 100, match, actions)
-                
-                # 更新流量使用
-                if not self.quotaManager.monitorQuotaUsage(datapath, srcMac, len(msg.data)):
-                    # 配额用完 - 添加阻止流表
-                    match = parser.OFPMatch(eth_src=srcMac)
-                    actions = []  # 空动作表示丢弃
-                    self.flowManager.addFlow(datapath, 200, match, actions)
-                    self.logger.info("User %s quota exceeded. Added block flow.", srcMac)
-                    return
-            else:
-                # 配额为0 - 中优先级阻止流表
-                match = parser.OFPMatch(eth_src=srcMac)
-                actions = []  # 空动作表示丢弃
-                self.flowManager.addFlow(datapath, 200, match, actions)
-                self.logger.info("User %s has no quota. Added block flow.", srcMac)
-                return
-        else:
-            # 未注册设备 - 低优先级允许流表（默认行为）
-            match = parser.OFPMatch(eth_src=srcMac)
-            actions = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-            self.flowManager.addFlow(datapath, 50, match, actions)
-            self.logger.info("MAC %s not registered. Added default allow flow.", srcMac)
-            
-        # 处理数据包转发
-        self.flowManager.handlePacket(datapath, srcMac, dstMac, inPort, msg)
+        # 委托给flow_manager处理所有流表操作
+        self.flowManager.handleTrafficControl(
+            datapath, srcMac, dstMac, inPort, msg, user_info
+        )
