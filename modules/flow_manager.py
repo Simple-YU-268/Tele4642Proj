@@ -93,7 +93,7 @@ class FlowManager:
         self.logger.info("Deleted flow with priority %d for match %s", priority, match)
 
     def handleTrafficControl(self, datapath, srcMac, dstMac, inPort, msg, user_info):
-        """修复后的智能流表控制 - 确保有配额时立即添加流表"""
+        """修复后的智能流表控制 - 强制添加许可流表"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
@@ -102,15 +102,16 @@ class FlowManager:
         
         # 确保user_info是字典且包含users
         if not user_info or not isinstance(user_info, dict):
-            self.logger.debug("Invalid user_info format")
+            self.logger.warning("❌ 无效的用户数据格式")
             return
             
         users = user_info.get('users', {})
         if not isinstance(users, dict):
-            self.logger.debug("Invalid users format")
+            self.logger.warning("❌ 无效的用户列表格式")
             return
             
-        # 检查该MAC是否在任何房间的设备列表中
+        # 强制检查所有设备
+        device_found = False
         for room_number, room_info in users.items():
             if not isinstance(room_info, dict):
                 continue
@@ -120,39 +121,44 @@ class FlowManager:
                 continue
                 
             if srcMac in devices:
+                device_found = True
                 quota = room_info.get('quota', 0)
                 
-                # 配额状态检测
+                # 强制配额检测
                 has_quota = quota > 0
                 
                 if has_quota:
-                    # 有配额 - 立即添加许可流表
-                    # 主机→路由器
+                    # 强制添加许可流表 - 无论是否有现有流表
+                    self.logger.info("🚀 强制添加许可流表给设备 %s (配额: %d bytes)", srcMac, quota)
+                    
+                    # 1. 主机→路由器
                     match_to_router = parser.OFPMatch(eth_src=srcMac, eth_dst=router_mac)
                     actions_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                     self.addFlow(datapath, 100, match_to_router, actions_to_router)
                     
-                    # 路由器→主机
+                    # 2. 路由器→主机
                     match_from_router = parser.OFPMatch(eth_src=router_mac, eth_dst=srcMac)
                     actions_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                     self.addFlow(datapath, 100, match_from_router, actions_from_router)
                     
-                    # 主机→其他网络
+                    # 3. 主机→其他网络
                     match_host_out = parser.OFPMatch(eth_src=srcMac)
                     actions_host_out = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                     self.addFlow(datapath, 100, match_host_out, actions_host_out)
                     
-                    # 其他网络→主机
+                    # 4. 其他网络→主机
                     match_host_in = parser.OFPMatch(eth_dst=srcMac)
                     actions_host_in = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                     self.addFlow(datapath, 100, match_host_in, actions_host_in)
                     
-                    self.logger.info("Added permit flows for host %s with quota %d", srcMac, quota)
+                    self.logger.info("✅ 成功添加许可流表给设备 %s", srcMac)
                     self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
+                    return
                 else:
-                    # 无配额，默认drop
-                    self.logger.debug("Device %s has no quota", srcMac)
-                break
-        else:
-            # 未注册设备 - 默认drop
-            self.logger.debug("Unregistered device %s", srcMac)
+                    # 无配额，强制记录
+                    self.logger.warning("⚠️  设备 %s 无配额，丢弃数据包", srcMac)
+                    return
+        
+        if not device_found:
+            # 未注册设备，强制记录
+            self.logger.warning("⚠️  未注册设备 %s，丢弃数据包", srcMac)
