@@ -89,71 +89,57 @@ class FlowManager:
         self.logger.info("Deleted flow with priority %d for match %s", priority, match)
 
     def handleTrafficControl(self, datapath, srcMac, dstMac, inPort, msg, user_info):
-        """智能流表控制：只在首次或配额变化时下发许可流表"""
+        """修复后的智能流表控制"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
         # 路由器MAC地址
         router_mac = "00:00:00:00:00:AA"
         
-        # 动态从user_info中检查设备
-        if user_info:
-            # 检查该MAC是否在任何房间的设备列表中
-            for room_number, room_info in user_info.items():
-                if room_number != 'router' and srcMac in room_info.get('devices', []):
-                    quota = room_info.get('quota', 0)
+        # 确保user_info是字典且包含users
+        if not user_info or not isinstance(user_info, dict):
+            self.logger.debug("Invalid user_info format")
+            return
+            
+        users = user_info.get('users', {})
+        if not isinstance(users, dict):
+            self.logger.debug("Invalid users format")
+            return
+            
+        # 检查该MAC是否在任何房间的设备列表中
+        for room_number, room_info in users.items():
+            if not isinstance(room_info, dict):
+                continue
+                
+            devices = room_info.get('devices', [])
+            if not isinstance(devices, list):
+                continue
+                
+            if srcMac in devices:
+                quota = room_info.get('quota', 0)
+                
+                # 配额状态检测
+                has_quota = quota > 0
+                
+                # 简化流表管理：只在有配额时添加，无配额时删除
+                if has_quota:
+                    # 添加许可流表（简化版本）
+                    # 主机→路由器
+                    match_to_router = parser.OFPMatch(eth_src=srcMac, eth_dst=router_mac)
+                    actions_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.addFlow(datapath, 100, match_to_router, actions_to_router)
                     
-                    # 检查是否已有许可流表（通过检查MAC地址表）
-                    existing_flows = self.getMacTable(datapath.id)
+                    # 路由器→主机
+                    match_from_router = parser.OFPMatch(eth_src=router_mac, eth_dst=srcMac)
+                    actions_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.addFlow(datapath, 100, match_from_router, actions_from_router)
                     
-                    # 配额状态变化检测
-                    has_quota = quota > 0
-                    has_flow = srcMac in existing_flows
-                    
-                    if has_quota and not has_flow:
-                        # 首次有配额 - 添加许可流表
-                        
-                        # 1. 主机→路由器
-                        match_host_to_router = parser.OFPMatch(eth_src=srcMac, eth_dst=router_mac)
-                        actions_host_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                        self.addFlow(datapath, 100, match_host_to_router, actions_host_to_router)
-                        
-                        # 2. 路由器→主机
-                        match_router_to_host = parser.OFPMatch(eth_src=router_mac, eth_dst=srcMac)
-                        actions_router_to_host = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                        self.addFlow(datapath, 100, match_router_to_host, actions_router_to_host)
-                        
-                        # 3. 主机→其他网络
-                        match_host_out = parser.OFPMatch(eth_src=srcMac)
-                        actions_host_out = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                        self.addFlow(datapath, 100, match_host_out, actions_host_out)
-                        
-                        # 4. 其他网络→主机
-                        match_host_in = parser.OFPMatch(eth_dst=srcMac)
-                        actions_host_in = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                        self.addFlow(datapath, 100, match_host_in, actions_host_in)
-                        
-                        self.logger.info("Added permit flows for host %s in room %s", srcMac, room_number)
-                        self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-                        
-                    elif not has_quota and has_flow:
-                        # 配额用完 - 删除许可流表
-                        self.deleteFlow(datapath, 100, parser.OFPMatch(eth_src=srcMac))
-                        self.deleteFlow(datapath, 100, parser.OFPMatch(eth_dst=srcMac))
-                        self.deleteFlow(datapath, 100, parser.OFPMatch(eth_src=srcMac, eth_dst=router_mac))
-                        self.deleteFlow(datapath, 100, parser.OFPMatch(eth_src=router_mac, eth_dst=srcMac))
-                        
-                        self.logger.info("Removed permit flows for host %s in room %s", srcMac, room_number)
-                        
-                    elif has_quota and has_flow:
-                        # 已有许可流表，直接处理数据包
-                        self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-                        
-                    else:
-                        # 无配额且无流表，默认drop
-                        self.logger.debug("Device %s in room %s has no quota and no flows", srcMac, room_number)
-                        
-                    break
+                    self.logger.info("Added permit flows for host %s", srcMac)
+                    self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
+                else:
+                    # 无配额，默认drop
+                    self.logger.debug("Device %s has no quota", srcMac)
+                break
         else:
-            # 无用户信息 - 默认drop
-            self.logger.debug("No user info for device %s", srcMac)
+            # 未注册设备 - 默认drop
+            self.logger.debug("Unregistered device %s", srcMac)
