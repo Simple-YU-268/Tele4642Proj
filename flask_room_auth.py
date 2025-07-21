@@ -137,9 +137,16 @@ def select_room_plan():
             user_data = load_user_data()
             if room_number in user_data['users']:
                 if plan != '0GB':
-                    user_data['users'][room_number]['quota'] += plans[plan]
-                save_user_data(user_data)
-                return jsonify({'status': 'success', 'plan': plan, 'quota': user_data['users'][room_number]['quota']})
+                    # 累加新购流量到现有配额
+                    current_quota = user_data['users'][room_number]['quota']
+                    new_quota = current_quota + plans[plan]
+                    user_data['users'][room_number]['quota'] = new_quota
+                    save_user_data(user_data)
+                    return jsonify({'status': 'success', 'plan': plan, 'quota': new_quota})
+                else:
+                    # 0GB套餐不改变配额
+                    save_user_data(user_data)
+                    return jsonify({'status': 'success', 'plan': plan, 'quota': user_data['users'][room_number]['quota']})
         
         return jsonify({'status': 'failure', 'message': 'Invalid plan'}), 400
     except Exception as e:
