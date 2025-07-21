@@ -93,72 +93,101 @@ class FlowManager:
         self.logger.info("Deleted flow with priority %d for match %s", priority, match)
 
     def handleTrafficControl(self, datapath, srcMac, dstMac, inPort, msg, user_info):
-        """修复后的智能流表控制 - 强制添加许可流表"""
+        """最终配额控制 - 路由器无配额，主机有配额才能通信"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
         # 路由器MAC地址
         router_mac = "00:00:00:00:00:AA"
         
-        # 确保user_info是字典且包含users
-        if not user_info or not isinstance(user_info, dict):
-            self.logger.warning("❌ 无效的用户数据格式")
-            return
+        # 获取用户数据
+        try:
+            if not user_info or not isinstance(user_info, dict):
+                self.logger.warning("❌ 无效的用户数据格式")
+                return
+                
+            users = user_info.get('users', {})
+            if not isinstance(users, dict):
+                self.logger.warning("❌ 无效的用户列表格式")
+                return
             
-        users = user_info.get('users', {})
-        if not isinstance(users, dict):
-            self.logger.warning("❌ 无效的用户列表格式")
-            return
+            # 检查源MAC的配额
+            src_has_quota = False
+            src_quota = 0
             
-        # 强制检查所有设备
-        device_found = False
-        for room_number, room_info in users.items():
-            if not isinstance(room_info, dict):
-                continue
-                
-            devices = room_info.get('devices', [])
-            if not isinstance(devices, list):
-                continue
-                
-            if srcMac in devices:
-                device_found = True
-                quota = room_info.get('quota', 0)
-                
-                # 强制配额检测
-                has_quota = quota > 0
-                
-                if has_quota:
-                    # 强制添加许可流表 - 无论是否有现有流表
-                    self.logger.info("🚀 强制添加许可流表给设备 %s (配额: %d bytes)", srcMac, quota)
+            # 检查目的MAC的配额
+            dst_has_quota = False
+            dst_quota = 0
+            
+            for room_number, room_info in users.items():
+                if not isinstance(room_info, dict):
+                    continue
                     
-                    # 1. 主机→路由器
+                devices = room_info.get('devices', [])
+                if not isinstance(devices, list):
+                    continue
+                
+                # 检查源MAC
+                if srcMac in devices:
+                    src_quota = room_info.get('quota', 0)
+                    src_has_quota = src_quota > 0
+                
+                # 检查目的MAC
+                if dstMac in devices:
+                    dst_quota = room_info.get('quota', 0)
+                    dst_has_quota = dst_quota > 0
+            
+            # 路由器特殊处理
+            if dstMac == router_mac:
+                # 主机→路由器：只有主机有配额才允许
+                if src_has_quota:
+                    self.logger.info("🚀 添加主机→路由器许可流表: %s → %s", srcMac, dstMac)
+                    
+                    # 主机→路由器
                     match_to_router = parser.OFPMatch(eth_src=srcMac, eth_dst=router_mac)
                     actions_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                     self.addFlow(datapath, 100, match_to_router, actions_to_router)
                     
-                    # 2. 路由器→主机
+                    # 路由器→主机
                     match_from_router = parser.OFPMatch(eth_src=router_mac, eth_dst=srcMac)
                     actions_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                     self.addFlow(datapath, 100, match_from_router, actions_from_router)
                     
-                    # 3. 主机→其他网络
-                    match_host_out = parser.OFPMatch(eth_src=srcMac)
-                    actions_host_out = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_host_out, actions_host_out)
-                    
-                    # 4. 其他网络→主机
-                    match_host_in = parser.OFPMatch(eth_dst=srcMac)
-                    actions_host_in = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_host_in, actions_host_in)
-                    
-                    self.logger.info("✅ 成功添加许可流表给设备 %s", srcMac)
+                    self.logger.info("✅ 成功添加主机↔路由器许可流表: %s ↔ %s", srcMac, router_mac)
                     self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
                     return
                 else:
-                    # 无配额，强制记录
-                    self.logger.warning("⚠️  设备 %s 无配额，丢弃数据包", srcMac)
+                    self.logger.warning("⚠️  主机 %s 无配额，无法访问路由器", srcMac)
                     return
-        
-        if not device_found:
-            # 未注册设备，强制记录
-            self.logger.warning("⚠️  未注册设备 %s，丢弃数据包", srcMac)
+            
+            # 主机间通信
+            elif src_has_quota and dst_has_quota:
+                # 双向都有配额
+                self.logger.info("🚀 添加主机间许可流表: %s ↔ %s", srcMac, dstMac)
+                
+                # 源→目的
+                match_src_dst = parser.OFPMatch(eth_src=srcMac, eth_dst=dstMac)
+                actions_src_dst = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                self.addFlow(datapath, 100, match_src_dst, actions_src_dst)
+                
+                # 目的→源
+                match_dst_src = parser.OFPMatch(eth_src=dstMac, eth_dst=srcMac)
+                actions_dst_src = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                self.addFlow(datapath, 100, match_dst_src, actions_dst_src)
+                
+                self.logger.info("✅ 成功添加主机间许可流表: %s ↔ %s", srcMac, dstMac)
+                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
+                return
+            else:
+                # 无配额，记录原因
+                if not src_has_quota:
+                    self.logger.warning("⚠️  源设备 %s 无配额", srcMac)
+                if not dst_has_quota and dstMac != router_mac:
+                    self.logger.warning("⚠️  目的设备 %s 无配额", dstMac)
+                return
+                
+        except Exception as e:
+            self.logger.error("❌ 处理流量控制时出错: %s", str(e))
+            
+        # 默认丢弃
+        self.logger.warning("⚠️  丢弃数据包: %s → %s", srcMac, dstMac)
