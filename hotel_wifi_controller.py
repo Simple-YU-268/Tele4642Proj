@@ -43,8 +43,38 @@ class HotelWifiController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switchFeaturesHandler(self, ev):
-        """交换机连接初始化"""
+        """交换机连接初始化 - 打印网元信息"""
         datapath = ev.msg.datapath
+        ofproto = datapath.ofproto
+        
+        # 打印交换机信息
+        self.logger.info("=" * 60)
+        self.logger.info("🌐 交换机连接初始化")
+        self.logger.info("=" * 60)
+        self.logger.info("📍 交换机ID: %016x", datapath.id)
+        self.logger.info("🔧 OpenFlow版本: %s", ofproto.OFP_VERSION)
+        self.logger.info("📊 端口数量: %d", len(datapath.ports))
+        
+        # 打印所有端口信息
+        self.logger.info("📋 端口详情:")
+        for port_no, port in datapath.ports.items():
+            self.logger.info("   🔗 端口%d: %s (MAC: %s)", 
+                           port.port_no, port.name.decode(), port.hw_addr)
+        
+        # 打印当前网络配置
+        self.logger.info("📝 当前网络配置:")
+        user_data = self.quotaManager.loadUserData()
+        users = user_data.get('users', {})
+        for room, info in users.items():
+            devices = info.get('devices', [])
+            quota = info.get('quota', 0)
+            quota_gb = quota / (1024**3)
+            self.logger.info("   🏨 房间%s: 设备%s, 配额%.1fGB", 
+                           room, devices, quota_gb)
+        
+        self.logger.info("=" * 60)
+        
+        # 安装默认流表
         self.flowManager.installDefaultFlow(datapath)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)

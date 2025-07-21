@@ -22,7 +22,7 @@ class FlowManager:
         self.addFlow(datapath, 0, match, actions)
     
     def addFlow(self, datapath, priority, match, actions, bufferId=None):
-        """添加流表项"""
+        """添加流表项 - 带日志输出"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
@@ -34,6 +34,10 @@ class FlowManager:
         else:
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                     match=match, instructions=inst)
+        
+        # 打印流表添加信息
+        self.logger.info("📊 添加流表: 交换机=%016x, 优先级=%d, 匹配=%s, 动作=%s", 
+                        datapath.id, priority, match, actions)
         
         datapath.send_msg(mod)
     
@@ -89,7 +93,7 @@ class FlowManager:
         self.logger.info("Deleted flow with priority %d for match %s", priority, match)
 
     def handleTrafficControl(self, datapath, srcMac, dstMac, inPort, msg, user_info):
-        """修复后的智能流表控制"""
+        """修复后的智能流表控制 - 确保有配额时立即添加流表"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
@@ -121,9 +125,8 @@ class FlowManager:
                 # 配额状态检测
                 has_quota = quota > 0
                 
-                # 简化流表管理：只在有配额时添加，无配额时删除
                 if has_quota:
-                    # 添加许可流表（简化版本）
+                    # 有配额 - 立即添加许可流表
                     # 主机→路由器
                     match_to_router = parser.OFPMatch(eth_src=srcMac, eth_dst=router_mac)
                     actions_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
@@ -134,7 +137,17 @@ class FlowManager:
                     actions_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                     self.addFlow(datapath, 100, match_from_router, actions_from_router)
                     
-                    self.logger.info("Added permit flows for host %s", srcMac)
+                    # 主机→其他网络
+                    match_host_out = parser.OFPMatch(eth_src=srcMac)
+                    actions_host_out = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.addFlow(datapath, 100, match_host_out, actions_host_out)
+                    
+                    # 其他网络→主机
+                    match_host_in = parser.OFPMatch(eth_dst=srcMac)
+                    actions_host_in = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.addFlow(datapath, 100, match_host_in, actions_host_in)
+                    
+                    self.logger.info("Added permit flows for host %s with quota %d", srcMac, quota)
                     self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
                 else:
                     # 无配额，默认drop
