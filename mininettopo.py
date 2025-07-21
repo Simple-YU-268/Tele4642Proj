@@ -12,10 +12,10 @@ def hotel_wifi_topology():
     # 添加交换机
     s1 = net.addSwitch('s1')
 
-    # 添加主机
-    h1 = net.addHost('h1', ip='10.0.0.1/24')
-    h2 = net.addHost('h2', ip='10.0.0.2/24')
-    h3 = net.addHost('h3', ip='10.0.0.3/24')
+    # 添加主机（分配固定MAC地址）
+    h1 = net.addHost('h1', ip='10.0.0.1/24', mac='00:00:00:00:00:01')
+    h2 = net.addHost('h2', ip='10.0.0.2/24', mac='00:00:00:00:00:02')
+    h3 = net.addHost('h3', ip='10.0.0.3/24', mac='00:00:00:00:00:03')
 
     # 添加NAT节点以实现互联网访问（使用Node类）
     nat = net.addHost('nat', ip='10.0.0.254/24')
