@@ -177,21 +177,21 @@
         async function loadDashboard() {
             try {
                 // Load room count
-                const roomsRes = await fetch('room_auth.json');
+                const roomsRes = await fetch('http://127.0.0.1:5000/get_rooms');
                 const roomsData = await roomsRes.json();
-                document.getElementById('total-rooms').textContent = Object.keys(roomsData.rooms).length;
+                document.getElementById('total-rooms').textContent = Object.keys(roomsData.rooms || {}).length;
 
                 // Load user data
-                const userRes = await fetch('user_data.json');
+                const userRes = await fetch('http://127.0.0.1:5000/get_all_users');
                 const userData = await userRes.json();
                 
                 let totalDevices = 0;
-                let totalUsers = Object.keys(userData.users).length;
+                let totalUsers = Object.keys(userData.users || {}).length;
                 let totalQuota = 0;
 
-                Object.values(userData.users).forEach(user => {
-                    totalDevices += user.devices.length;
-                    totalQuota += user.quota / (1024**3);
+                Object.values(userData.users || {}).forEach(user => {
+                    totalDevices += (user.devices || []).length;
+                    totalQuota += (user.quota || 0) / (1024**3);
                 });
 
                 document.getElementById('total-devices').textContent = totalDevices;
@@ -200,28 +200,52 @@
                 
             } catch (error) {
                 console.error('Error loading dashboard:', error);
+                // Fallback to direct file reading
+                try {
+                    const roomsRes = await fetch('room_auth.json');
+                    const roomsData = await roomsRes.json();
+                    document.getElementById('total-rooms').textContent = Object.keys(roomsData.rooms || {}).length;
+
+                    const userRes = await fetch('user_data.json');
+                    const userData = await userRes.json();
+                    
+                    let totalDevices = 0;
+                    let totalUsers = Object.keys(userData.users || {}).length;
+                    let totalQuota = 0;
+
+                    Object.values(userData.users || {}).forEach(user => {
+                        totalDevices += (user.devices || []).length;
+                        totalQuota += (user.quota || 0) / (1024**3);
+                    });
+
+                    document.getElementById('total-devices').textContent = totalDevices;
+                    document.getElementById('total-users').textContent = totalUsers;
+                    document.getElementById('total-quota').textContent = totalQuota.toFixed(2);
+                } catch (fallbackError) {
+                    console.error('Fallback also failed:', fallbackError);
+                }
             }
         }
 
         async function loadRooms() {
             try {
-                const roomsRes = await fetch('room_auth.json');
+                const roomsRes = await fetch('http://127.0.0.1:5000/get_rooms');
                 const roomsData = await roomsRes.json();
                 
-                const userRes = await fetch('user_data.json');
+                const userRes = await fetch('http://127.0.0.1:5000/get_all_users');
                 const userData = await userRes.json();
                 
                 const tbody = document.getElementById('rooms-table');
                 tbody.innerHTML = '';
                 
-                Object.entries(roomsData.rooms).forEach(([room, phone]) => {
+                Object.entries(roomsData.rooms || {}).forEach(([room, phone]) => {
                     const user = userData.users[room] || { quota: 0, devices: [] };
                     const row = tbody.insertRow();
                     row.innerHTML = `
                         <td>${room}</td>
                         <td>${phone}</td>
-                        <td>${(user.quota / (1024**3)).toFixed(2)}</td>
-                        <td>${user.devices.length}</td>
+                        <td>${((user.quota || 0) / (1024**3)).toFixed(2)}</td>
+                        <td>${(user.devices || []).length}</td>
                         <td>
                             <button class="btn danger" onclick="deleteRoom('${room}')">Delete</button>
                         </td>
@@ -229,30 +253,79 @@
                 });
             } catch (error) {
                 console.error('Error loading rooms:', error);
+                // Fallback to direct file reading
+                try {
+                    const roomsRes = await fetch('room_auth.json');
+                    const roomsData = await roomsRes.json();
+                    
+                    const userRes = await fetch('user_data.json');
+                    const userData = await userRes.json();
+                    
+                    const tbody = document.getElementById('rooms-table');
+                    tbody.innerHTML = '';
+                    
+                    Object.entries(roomsData.rooms || {}).forEach(([room, phone]) => {
+                        const user = userData.users[room] || { quota: 0, devices: [] };
+                        const row = tbody.insertRow();
+                        row.innerHTML = `
+                            <td>${room}</td>
+                            <td>${phone}</td>
+                            <td>${((user.quota || 0) / (1024**3)).toFixed(2)}</td>
+                            <td>${(user.devices || []).length}</td>
+                            <td>
+                                <button class="btn danger" onclick="deleteRoom('${room}')">Delete</button>
+                            </td>
+                        `;
+                    });
+                } catch (fallbackError) {
+                    console.error('Fallback also failed:', fallbackError);
+                }
             }
         }
 
         async function loadDevices() {
             try {
-                const userRes = await fetch('user_data.json');
+                const userRes = await fetch('http://127.0.0.1:5000/get_all_users');
                 const userData = await userRes.json();
                 
                 const tbody = document.getElementById('devices-table');
                 tbody.innerHTML = '';
                 
-                Object.entries(userData.users).forEach(([room, user]) => {
-                    user.devices.forEach(mac => {
+                Object.entries(userData.users || {}).forEach(([room, user]) => {
+                    (user.devices || []).forEach(mac => {
                         const row = tbody.insertRow();
                         row.innerHTML = `
                             <td>${room}</td>
                             <td>${mac}</td>
-                            <td>${(user.quota / (1024**3)).toFixed(2)}</td>
-                            <td>${user.quota > 0 ? 'Active' : 'Quota Exceeded'}</td>
+                            <td>${((user.quota || 0) / (1024**3)).toFixed(2)}</td>
+                            <td>${(user.quota || 0) > 0 ? 'Active' : 'Quota Exceeded'}</td>
                         `;
                     });
                 });
             } catch (error) {
                 console.error('Error loading devices:', error);
+                // Fallback to direct file reading
+                try {
+                    const userRes = await fetch('user_data.json');
+                    const userData = await userRes.json();
+                    
+                    const tbody = document.getElementById('devices-table');
+                    tbody.innerHTML = '';
+                    
+                    Object.entries(userData.users || {}).forEach(([room, user]) => {
+                        (user.devices || []).forEach(mac => {
+                            const row = tbody.insertRow();
+                            row.innerHTML = `
+                                <td>${room}</td>
+                                <td>${mac}</td>
+                                <td>${((user.quota || 0) / (1024**3)).toFixed(2)}</td>
+                                <td>${(user.quota || 0) > 0 ? 'Active' : 'Quota Exceeded'}</td>
+                            `;
+                        });
+                    });
+                } catch (fallbackError) {
+                    console.error('Fallback also failed:', fallbackError);
+                }
             }
         }
 

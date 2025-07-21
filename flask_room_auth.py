@@ -294,6 +294,24 @@ def consume_room_traffic():
     except Exception as e:
         return jsonify({'status': 'failure', 'message': str(e)}), 500
 
+@app.route('/get_rooms', methods=['GET'])
+def get_rooms():
+    """获取所有房间信息"""
+    try:
+        room_auth = load_room_auth()
+        return jsonify({'rooms': room_auth})
+    except Exception as e:
+        return jsonify({'status': 'failure', 'message': str(e)}), 500
+
+@app.route('/get_all_users', methods=['GET'])
+def get_all_users():
+    """获取所有用户信息"""
+    try:
+        user_data = load_user_data()
+        return jsonify({'users': user_data.get('users', {})})
+    except Exception as e:
+        return jsonify({'status': 'failure', 'message': str(e)}), 500
+
 @app.route('/add_room', methods=['POST'])
 def add_room():
     """添加新房间（管理员功能）"""

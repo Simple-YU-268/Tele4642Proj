@@ -1,5 +1,5 @@
 from mininet.net import Mininet
-from mininet.node import Controller, RemoteController, NAT
+from mininet.node import Controller, RemoteController
 from mininet.cli import CLI
 from mininet.log import setLogLevel
 
@@ -17,8 +17,8 @@ def hotel_wifi_topology():
     h2 = net.addHost('h2', ip='10.0.0.2/24')
     h3 = net.addHost('h3', ip='10.0.0.3/24')
 
-    # 添加NAT节点以实现互联网访问
-    nat = net.addHost('nat', cls=NAT, ip='10.0.0.254/24', subnet='10.0.0.0/24')
+    # 添加NAT节点以实现互联网访问（使用Node类）
+    nat = net.addHost('nat', ip='10.0.0.254/24')
     
     # 连接所有节点
     net.addLink(h1, s1)
@@ -33,6 +33,10 @@ def hotel_wifi_topology():
     h1.cmd('route add default gw 10.0.0.254')
     h2.cmd('route add default gw 10.0.0.254')
     h3.cmd('route add default gw 10.0.0.254')
+    
+    # 配置NAT规则
+    nat.cmd('echo 1 > /proc/sys/net/ipv4/ip_forward')
+    nat.cmd('iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE')
     
     # 配置DNS服务器
     h1.cmd('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
