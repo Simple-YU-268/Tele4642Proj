@@ -79,7 +79,7 @@ class HotelWifiController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packetInHandler(self, ev):
-        """数据包处理入口 - 委托给flow_manager处理"""
+        """数据包处理入口 - 每次ping都输出详细信息"""
         msg = ev.msg
         datapath = msg.datapath
         
@@ -95,6 +95,18 @@ class HotelWifiController(app_manager.RyuApp):
         
         # 获取用户配额信息
         user_info = self.quotaManager.getUserQuotaInfo(srcMac)
+        
+        # 每次数据包都输出详细信息
+        self.logger.info("📦 数据包: %s → %s, 端口=%d, 交换机=%016x", 
+                        srcMac, dstMac, inPort, dpid)
+        
+        # 检查配额状态
+        if user_info:
+            quota_gb = user_info.get('quota', 0) / (1024**3)
+            used_gb = user_info.get('used_traffic', 0) / (1024**3)
+            self.logger.info("💾 配额状态: %.1fGB/%.1fGB 已使用", used_gb, quota_gb)
+        else:
+            self.logger.info("⚠️  未注册设备: %s", srcMac)
         
         # 委托给flow_manager处理所有流表操作
         self.flowManager.handleTrafficControl(
