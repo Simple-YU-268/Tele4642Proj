@@ -17,36 +17,31 @@ def hotel_wifi_topology():
     h2 = net.addHost('h2', ip='10.0.0.2/24', mac='00:00:00:00:00:02')
     h3 = net.addHost('h3', ip='10.0.0.3/24', mac='00:00:00:00:00:03')
 
-    # 添加NAT节点以实现互联网访问（使用Node类）
-    nat = net.addHost('nat', ip='10.0.0.254/24')
+    # 添加服务器（代替NAT）
+    server = net.addHost('server', ip='6.6.6.6/24', mac='00:00:00:00:00:AA')
     
     # 连接所有节点
     net.addLink(h1, s1)
     net.addLink(h2, s1)
     net.addLink(h3, s1)
-    net.addLink(nat, s1)
+    net.addLink(server, s1)
 
     # 启动网络
     net.start()
     
-    # 配置主机的默认网关指向NAT
-    h1.cmd('route add default gw 10.0.0.254')
-    h2.cmd('route add default gw 10.0.0.254')
-    h3.cmd('route add default gw 10.0.0.254')
+    # 配置主机的默认网关指向服务器
+    h1.cmd('route add default gw 6.6.6.6')
+    h2.cmd('route add default gw 6.6.6.6')
+    h3.cmd('route add default gw 6.6.6.6')
     
-    # 配置NAT规则
-    nat.cmd('echo 1 > /proc/sys/net/ipv4/ip_forward')
-    nat.cmd('iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE')
+    # 配置服务器路由
+    server.cmd('echo 1 > /proc/sys/net/ipv4/ip_forward')
+    server.cmd('iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE')
     
     # 配置DNS服务器
     h1.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
     h2.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
     h3.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
-    
-    # 确保主机可以访问NAT
-    h1.cmd('ip route add default via 10.0.0.254')
-    h2.cmd('ip route add default via 10.0.0.254')
-    h3.cmd('ip route add default via 10.0.0.254')
 
     # 启动CLI
     CLI(net)
