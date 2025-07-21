@@ -191,3 +191,64 @@ class FlowManager:
             
         # 默认丢弃
         self.logger.warning("⚠️  丢弃数据包: %s → %s", srcMac, dstMac)
+
+    def initializeSwitchFlows(self, datapath, quotaManager):
+        """交换机初始化 - 下发现有设备的流表"""
+        # 安装默认流表
+        self.installDefaultFlow(datapath)
+        
+        # 立即检查并下发现有设备的流表
+        self.logger.info("🚀 立即检查并下发现有设备的流表...")
+        
+        # 从quotaManager获取用户数据
+        if hasattr(quotaManager, 'loadUserData'):
+            user_data = quotaManager.loadUserData()
+        else:
+            # 兼容旧版本，直接读取文件
+            import json
+            try:
+                with open('user_data.json', 'r') as f:
+                    user_data = json.load(f)
+            except:
+                user_data = {'users': {}}
+        
+        users = user_data.get('users', {})
+        
+        # 路由器MAC地址
+        router_mac = "00:00:00:00:00:AA"
+        
+        # 为每个有配额的设备下发流表
+        for room_number, room_info in users.items():
+            devices = room_info.get('devices', [])
+            quota = room_info.get('quota', 0)
+            
+            if quota > 0:
+                for device_mac in devices:
+                    self.logger.info("   📊 为设备 %s 下发许可流表 (配额: %.1fGB)", 
+                                   device_mac, quota / (1024**3))
+                    
+                    # 立即下发流表
+                    parser = datapath.ofproto_parser
+                    ofproto = datapath.ofproto
+                    
+                    # 主机→路由器
+                    match_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=router_mac)
+                    actions_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.addFlow(datapath, 100, match_to_router, actions_to_router)
+                    
+                    # 路由器→主机
+                    match_from_router = parser.OFPMatch(eth_src=router_mac, eth_dst=device_mac)
+                    actions_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.addFlow(datapath, 100, match_from_router, actions_from_router)
+                    
+                    # 主机→其他网络
+                    match_host_out = parser.OFPMatch(eth_src=device_mac)
+                    actions_host_out = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.addFlow(datapath, 100, match_host_out, actions_host_out)
+                    
+                    # 其他网络→主机
+                    match_host_in = parser.OFPMatch(eth_dst=device_mac)
+                    actions_host_in = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.addFlow(datapath, 100, match_host_in, actions_host_in)
+        
+        self.logger.info("✅ 初始流表下发完成")
