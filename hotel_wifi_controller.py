@@ -43,7 +43,7 @@ class HotelWifiController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switchFeaturesHandler(self, ev):
-        """交换机连接初始化 - 打印网元信息"""
+        """交换机连接初始化 - 立即检查并下发流表"""
         datapath = ev.msg.datapath
         ofproto = datapath.ofproto
         
@@ -61,21 +61,52 @@ class HotelWifiController(app_manager.RyuApp):
             self.logger.info("   🔗 端口%d: %s (MAC: %s)", 
                            port.port_no, port.name.decode(), port.hw_addr)
         
-        # 打印当前网络配置
-        self.logger.info("📝 当前网络配置:")
-        user_data = self.quotaManager.loadUserData()
-        users = user_data.get('users', {})
-        for room, info in users.items():
-            devices = info.get('devices', [])
-            quota = info.get('quota', 0)
-            quota_gb = quota / (1024**3)
-            self.logger.info("   🏨 房间%s: 设备%s, 配额%.1fGB", 
-                           room, devices, quota_gb)
-        
-        self.logger.info("=" * 60)
-        
         # 安装默认流表
         self.flowManager.installDefaultFlow(datapath)
+        
+        # 立即检查并下发现有设备的流表
+        self.logger.info("🚀 立即检查并下发现有设备的流表...")
+        user_data = self.quotaManager.loadUserData()
+        users = user_data.get('users', {})
+        
+        # 路由器MAC地址
+        router_mac = "00:00:00:00:00:AA"
+        
+        # 为每个有配额的设备下发流表
+        for room_number, room_info in users.items():
+            devices = room_info.get('devices', [])
+            quota = room_info.get('quota', 0)
+            
+            if quota > 0:
+                for device_mac in devices:
+                    self.logger.info("   📊 为设备 %s 下发许可流表 (配额: %.1fGB)", 
+                                   device_mac, quota / (1024**3))
+                    
+                    # 立即下发流表
+                    parser = datapath.ofproto_parser
+                    
+                    # 主机→路由器
+                    match_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=router_mac)
+                    actions_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.flowManager.addFlow(datapath, 100, match_to_router, actions_to_router)
+                    
+                    # 路由器→主机
+                    match_from_router = parser.OFPMatch(eth_src=router_mac, eth_dst=device_mac)
+                    actions_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.flowManager.addFlow(datapath, 100, match_from_router, actions_from_router)
+                    
+                    # 主机→其他网络
+                    match_host_out = parser.OFPMatch(eth_src=device_mac)
+                    actions_host_out = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.flowManager.addFlow(datapath, 100, match_host_out, actions_host_out)
+                    
+                    # 其他网络→主机
+                    match_host_in = parser.OFPMatch(eth_dst=device_mac)
+                    actions_host_in = [parser.OFPPActionOutput(ofproto.OFPP_FLOOD)]
+                    self.flowManager.addFlow(datapath, 100, match_host_in, actions_host_in)
+        
+        self.logger.info("✅ 初始流表下发完成")
+        self.logger.info("=" * 60)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packetInHandler(self, ev):
