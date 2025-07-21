@@ -68,9 +68,17 @@ class HotelWifiController(app_manager.RyuApp):
             self.logger.info("MAC %s not in whitelist. Dropping packet.", srcMac)
             return
             
-        # 更新流量统计并检查配额
-        if not self.quotaManager.monitorQuotaUsage(datapath, srcMac, len(msg.data)):
-            self.logger.info("User %s quota exceeded. Blocking access.", srcMac)
+        # 检查用户配额（流量为0时阻止，不为0时允许）
+        user_info = self.quotaManager.getUserQuotaInfo(srcMac)
+        if user_info and user_info['quota'] > 0:
+            # 用户有配额，允许访问并监控流量
+            if not self.quotaManager.monitorQuotaUsage(datapath, srcMac, len(msg.data)):
+                self.logger.info("User %s quota exceeded. Blocking access.", srcMac)
+                return
+        elif user_info and user_info['quota'] == 0:
+            # 用户配额为0，阻止访问
+            self.logger.info("User %s has no quota. Blocking access.", srcMac)
+            self.quotaManager.blockUser(datapath, srcMac)
             return
             
         # 处理数据包转发

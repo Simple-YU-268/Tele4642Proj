@@ -86,21 +86,41 @@ class QuotaManager:
         return True  # 配额未用完
     
     def blockUser(self, datapath, mac_address):
-        """阻止用户网络访问"""
+        """阻止用户网络访问（同时阻止上行和下行流量）"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 添加阻止该MAC地址的流表项
-        match = parser.OFPMatch(eth_src=mac_address)
+        # 阻止上行流量（该MAC作为源地址）
+        match_up = parser.OFPMatch(eth_src=mac_address)
         actions = []  # 空动作表示丢弃
+        self.flowManager.addFlow(datapath, 1000, match_up, actions)
         
-        # 高优先级阻止流表
-        self.flowManager.addFlow(datapath, 1000, match, actions)
+        # 阻止下行流量（该MAC作为目的地址）
+        match_down = parser.OFPMatch(eth_dst=mac_address)
+        self.flowManager.addFlow(datapath, 1000, match_down, actions)
         
         # 从白名单中移除
         self.whitelistManager.removeFromWhitelist(mac_address)
         
-        self.logger.info("Blocked user with MAC: %s", mac_address)
+        self.logger.info("Blocked user with MAC: %s (both uplink and downlink)", mac_address)
+
+    def unblockUser(self, datapath, mac_address):
+        """解除用户网络访问限制（删除之前设置的drop流表）"""
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        
+        # 删除阻止上行流量的流表项
+        match_up = parser.OFPMatch(eth_src=mac_address)
+        self.flowManager.deleteFlow(datapath, 1000, match_up)
+        
+        # 删除阻止下行流量的流表项
+        match_down = parser.OFPMatch(eth_dst=mac_address)
+        self.flowManager.deleteFlow(datapath, 1000, match_down)
+        
+        # 重新添加到白名单
+        self.whitelistManager.addToWhitelist(mac_address)
+        
+        self.logger.info("Unblocked user with MAC: %s (removed drop flows)", mac_address)
     
     def monitorQuotaUsage(self, datapath, mac_address, bytes_count):
         """监控用户配额使用情况"""

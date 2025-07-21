@@ -69,3 +69,21 @@ class FlowManager:
     def getMacTable(self, dpid):
         """获取MAC地址表"""
         return dict(self.macToPort.get(dpid, {}))
+    
+    def deleteFlow(self, datapath, priority, match):
+        """删除流表项"""
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        
+        # 创建删除流表项的消息
+        mod = parser.OFPFlowMod(
+            datapath=datapath,
+            command=ofproto.OFPFC_DELETE,
+            priority=priority,
+            match=match,
+            out_port=ofproto.OFPP_ANY,
+            out_group=ofproto.OFPG_ANY
+        )
+        
+        datapath.send_msg(mod)
+        self.logger.info("Deleted flow with priority %d for match %s", priority, match)
