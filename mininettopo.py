@@ -39,9 +39,14 @@ def hotel_wifi_topology():
     nat.cmd('iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE')
     
     # 配置DNS服务器
-    h1.cmd('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
-    h2.cmd('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
-    h3.cmd('echo "nameserver 8.8.8.8" >> /etc/resolv.conf')
+    h1.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
+    h2.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
+    h3.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
+    
+    # 确保主机可以访问NAT
+    h1.cmd('ip route add default via 10.0.0.254')
+    h2.cmd('ip route add default via 10.0.0.254')
+    h3.cmd('ip route add default via 10.0.0.254')
 
     # 启动CLI
     CLI(net)
