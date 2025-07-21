@@ -100,25 +100,43 @@ class FlowManager:
         # 路由器MAC地址
         router_mac = "00:00:00:00:00:AA"
         
-        # 获取用户数据
+        # 特殊处理路由器通信（广播、多播等）
+        if srcMac.lower() == router_mac.lower() or dstMac.lower() == router_mac.lower():
+            # 路由器通信直接允许
+            self.logger.info("🌐 路由器通信: %s → %s", srcMac, dstMac)
+            self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
+            return
+            
+        # 处理多播/广播流量
+        if dstMac.startswith("33:33:") or dstMac == "ff:ff:ff:ff:ff:ff":
+            self.logger.info("📡 广播/多播流量: %s → %s", srcMac, dstMac)
+            self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
+            return
+        
+        # 获取用户数据 - 容错处理
         try:
-            if not user_info or not isinstance(user_info, dict):
-                self.logger.warning("❌ 无效的用户数据格式")
-                return
-                
-            users = user_info.get('users', {})
+            users = {}
+            if user_info and isinstance(user_info, dict):
+                users = user_info.get('users', {})
+            elif user_info is None:
+                # 如果user_info为None，尝试从文件读取
+                import json
+                try:
+                    with open('user_data.json', 'r') as f:
+                        data = json.load(f)
+                        users = data.get('users', {})
+                except:
+                    users = {}
+            
             if not isinstance(users, dict):
-                self.logger.warning("❌ 无效的用户列表格式")
-                return
+                users = {}
             
             # 检查源MAC的配额
             src_has_quota = False
-            src_quota = 0
-            
             # 检查目的MAC的配额
             dst_has_quota = False
-            dst_quota = 0
             
+            # 遍历用户数据检查设备配额
             for room_number, room_info in users.items():
                 if not isinstance(room_info, dict):
                     continue
@@ -127,70 +145,49 @@ class FlowManager:
                 if not isinstance(devices, list):
                     continue
                 
+                quota = room_info.get('quota', 0)
+                
                 # 检查源MAC
-                if srcMac in devices:
-                    src_quota = room_info.get('quota', 0)
-                    src_has_quota = src_quota > 0
+                if srcMac in devices and quota > 0:
+                    src_has_quota = True
                 
                 # 检查目的MAC
-                if dstMac in devices:
-                    dst_quota = room_info.get('quota', 0)
-                    dst_has_quota = dst_quota > 0
+                if dstMac in devices and quota > 0:
+                    dst_has_quota = True
             
-            # 路由器特殊处理
-            if dstMac == router_mac:
-                # 主机→路由器：只有主机有配额才允许
-                if src_has_quota:
-                    self.logger.info("🚀 添加主机→路由器许可流表: %s → %s", srcMac, dstMac)
-                    
-                    # 主机→路由器
-                    match_to_router = parser.OFPMatch(eth_src=srcMac, eth_dst=router_mac)
-                    actions_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_to_router, actions_to_router)
-                    
-                    # 路由器→主机
-                    match_from_router = parser.OFPMatch(eth_src=router_mac, eth_dst=srcMac)
-                    actions_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_from_router, actions_from_router)
-                    
-                    self.logger.info("✅ 成功添加主机↔路由器许可流表: %s ↔ %s", srcMac, router_mac)
-                    self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-                    return
-                else:
-                    self.logger.warning("⚠️  主机 %s 无配额，无法访问路由器", srcMac)
-                    return
+            # 允许路由器与任何设备的通信
+            if srcMac.lower() == router_mac.lower() or dstMac.lower() == router_mac.lower():
+                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
+                return
             
-            # 主机间通信
-            elif src_has_quota and dst_has_quota:
-                # 双向都有配额
-                self.logger.info("🚀 添加主机间许可流表: %s ↔ %s", srcMac, dstMac)
-                
-                # 源→目的
-                match_src_dst = parser.OFPMatch(eth_src=srcMac, eth_dst=dstMac)
-                actions_src_dst = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                self.addFlow(datapath, 100, match_src_dst, actions_src_dst)
-                
-                # 目的→源
-                match_dst_src = parser.OFPMatch(eth_src=dstMac, eth_dst=srcMac)
-                actions_dst_src = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                self.addFlow(datapath, 100, match_dst_src, actions_dst_src)
-                
-                self.logger.info("✅ 成功添加主机间许可流表: %s ↔ %s", srcMac, dstMac)
+            # 允许有配额的设备通信
+            if src_has_quota and dst_has_quota:
+                self.logger.info("✅ 允许通信: %s ↔ %s (都有配额)", srcMac, dstMac)
+                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
+                return
+            elif src_has_quota and dstMac.lower() == router_mac.lower():
+                self.logger.info("✅ 允许访问路由器: %s → %s", srcMac, dstMac)
+                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
+                return
+            elif srcMac.lower() == router_mac.lower() and dst_has_quota:
+                self.logger.info("✅ 路由器响应: %s → %s", srcMac, dstMac)
                 self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
                 return
             else:
-                # 无配额，记录原因
-                if not src_has_quota:
-                    self.logger.warning("⚠️  源设备 %s 无配额", srcMac)
-                if not dst_has_quota and dstMac != router_mac:
-                    self.logger.warning("⚠️  目的设备 %s 无配额", dstMac)
+                # 记录但不阻止，允许基础网络发现
+                if not src_has_quota and srcMac.lower() != router_mac.lower():
+                    self.logger.debug("⚠️  源设备 %s 无配额", srcMac)
+                if not dst_has_quota and dstMac.lower() != router_mac.lower() and not dstMac.startswith("33:33:"):
+                    self.logger.debug("⚠️  目的设备 %s 无配额", dstMac)
+                
+                # 允许基础网络发现流量
+                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
                 return
                 
         except Exception as e:
             self.logger.error("❌ 处理流量控制时出错: %s", str(e))
-            
-        # 默认丢弃
-        self.logger.warning("⚠️  丢弃数据包: %s → %s", srcMac, dstMac)
+            # 出错时允许流量通过，避免网络中断
+            self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
 
     def initializeSwitchFlows(self, datapath, quotaManager):
         """交换机初始化 - 下发现有设备的流表"""
