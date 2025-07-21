@@ -228,17 +228,16 @@ class FlowManager:
                     parser = datapath.ofproto_parser
                     ofproto = datapath.ofproto
                     
-                    # 更精确的流表规则 - 使用正常端口转发而不是FLOOD
-                    # 需要根据实际网络拓扑确定端口，这里使用更通用的规则
+                    # 更精确的流表规则 - 使用FLOOD进行广播学习
                     
                     # 允许设备到任何目的地的流量
                     match_any_dst = parser.OFPMatch(eth_src=device_mac)
-                    actions_any_dst = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
+                    actions_any_dst = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                     self.addFlow(datapath, 100, match_any_dst, actions_any_dst)
                     
                     # 允许任何源到设备的流量
                     match_any_src = parser.OFPMatch(eth_dst=device_mac)
-                    actions_any_src = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
+                    actions_any_src = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                     self.addFlow(datapath, 100, match_any_src, actions_any_src)
                     
                     # 允许设备间的直接通信
@@ -247,7 +246,7 @@ class FlowManager:
                             # 设备到设备
                             match_device_to_device = parser.OFPMatch(
                                 eth_src=device_mac, eth_dst=other_device)
-                            actions_device_to_device = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
+                            actions_device_to_device = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
                             self.addFlow(datapath, 110, match_device_to_device, actions_device_to_device)
         
         self.logger.info("✅ 初始流表下发完成")
