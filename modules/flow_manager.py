@@ -228,24 +228,26 @@ class FlowManager:
                     parser = datapath.ofproto_parser
                     ofproto = datapath.ofproto
                     
-                    # 主机→路由器
-                    match_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=router_mac)
-                    actions_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_to_router, actions_to_router)
+                    # 更精确的流表规则 - 使用正常端口转发而不是FLOOD
+                    # 需要根据实际网络拓扑确定端口，这里使用更通用的规则
                     
-                    # 路由器→主机
-                    match_from_router = parser.OFPMatch(eth_src=router_mac, eth_dst=device_mac)
-                    actions_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_from_router, actions_from_router)
+                    # 允许设备到任何目的地的流量
+                    match_any_dst = parser.OFPMatch(eth_src=device_mac)
+                    actions_any_dst = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
+                    self.addFlow(datapath, 100, match_any_dst, actions_any_dst)
                     
-                    # 主机→其他网络
-                    match_host_out = parser.OFPMatch(eth_src=device_mac)
-                    actions_host_out = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_host_out, actions_host_out)
+                    # 允许任何源到设备的流量
+                    match_any_src = parser.OFPMatch(eth_dst=device_mac)
+                    actions_any_src = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
+                    self.addFlow(datapath, 100, match_any_src, actions_any_src)
                     
-                    # 其他网络→主机
-                    match_host_in = parser.OFPMatch(eth_dst=device_mac)
-                    actions_host_in = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_host_in, actions_host_in)
+                    # 允许设备间的直接通信
+                    for other_device in devices:
+                        if other_device != device_mac:
+                            # 设备到设备
+                            match_device_to_device = parser.OFPMatch(
+                                eth_src=device_mac, eth_dst=other_device)
+                            actions_device_to_device = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
+                            self.addFlow(datapath, 110, match_device_to_device, actions_device_to_device)
         
         self.logger.info("✅ 初始流表下发完成")
