@@ -49,9 +49,11 @@ class HotelWifiController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packetInHandler(self, ev):
-        """数据包处理入口 - 基于用户数据的动态白名单"""
+        """数据包处理入口 - 基于流表优先级的流量控制"""
         msg = ev.msg
         datapath = msg.datapath
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
         
         # 解析数据
         from ryu.lib.packet import packet, ethernet
@@ -63,24 +65,38 @@ class HotelWifiController(app_manager.RyuApp):
         inPort = msg.match['in_port']
         dpid = datapath.id
         
-        # 动态检查：基于user_data.json中的设备列表
+        # 基于流表优先级的流量控制
         user_info = self.quotaManager.getUserQuotaInfo(srcMac)
-        if not user_info:
-            # MAC地址不在任何房间的设备列表中
-            self.logger.info("MAC %s not registered to any room. Dropping packet.", srcMac)
-            return
-            
-        # 检查用户配额（流量为0时阻止，不为0时允许）
-        if user_info['quota'] > 0:
-            # 用户有配额，允许访问并监控流量
-            if not self.quotaManager.monitorQuotaUsage(datapath, srcMac, len(msg.data)):
-                self.logger.info("User %s quota exceeded. Blocking access.", srcMac)
+        
+        if user_info:
+            # 已注册设备
+            if user_info['quota'] > 0:
+                # 有配额 - 高优先级允许流表
+                match = parser.OFPMatch(eth_src=srcMac)
+                actions = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+                self.flowManager.addFlow(datapath, 100, match, actions)
+                
+                # 更新流量使用
+                if not self.quotaManager.monitorQuotaUsage(datapath, srcMac, len(msg.data)):
+                    # 配额用完 - 添加阻止流表
+                    match = parser.OFPMatch(eth_src=srcMac)
+                    actions = []  # 空动作表示丢弃
+                    self.flowManager.addFlow(datapath, 200, match, actions)
+                    self.logger.info("User %s quota exceeded. Added block flow.", srcMac)
+                    return
+            else:
+                # 配额为0 - 中优先级阻止流表
+                match = parser.OFPMatch(eth_src=srcMac)
+                actions = []  # 空动作表示丢弃
+                self.flowManager.addFlow(datapath, 200, match, actions)
+                self.logger.info("User %s has no quota. Added block flow.", srcMac)
                 return
         else:
-            # 用户配额为0，阻止访问
-            self.logger.info("User %s has no quota. Blocking access.", srcMac)
-            self.quotaManager.blockUser(datapath, srcMac)
-            return
+            # 未注册设备 - 低优先级允许流表（默认行为）
+            match = parser.OFPMatch(eth_src=srcMac)
+            actions = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+            self.flowManager.addFlow(datapath, 50, match, actions)
+            self.logger.info("MAC %s not registered. Added default allow flow.", srcMac)
             
         # 处理数据包转发
         self.flowManager.handlePacket(datapath, srcMac, dstMac, inPort, msg)
