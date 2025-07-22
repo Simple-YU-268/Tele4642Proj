@@ -126,6 +126,12 @@ class FlowManager:
         match_router_to_device = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac, eth_type=0x0800)
         actions_router_to_device = [parser.OFPActionOutput(device_port)]
         self.addFlow(datapath, 400, match_router_to_device, actions_router_to_device)
+
+        # 优先级350: ICMP DROP
+        # 这个规则会被更具体的规则覆盖
+        match_icmp_default = parser.OFPMatch(eth_type=0x0800)
+        actions_icmp_default = []  # 空动作 = DROP
+        self.addFlow(datapath, 350, match_icmp_default, actions_icmp_default)
         
         # 优先级300: 设备到路由器的ARP（允许）
         match_arp_to_router = parser.OFPMatch(eth_type=0x0806, eth_src=device_mac, eth_dst=self.router_mac)
@@ -137,15 +143,15 @@ class FlowManager:
         actions_arp_from_router = [parser.OFPActionOutput(device_port)]
         self.addFlow(datapath, 300, match_arp_from_router, actions_arp_from_router)
         
-        # 优先级200: 设备ARP广播（允许）
-        match_arp_broadcast = parser.OFPMatch(eth_type=0x0806, eth_src=device_mac, eth_dst="ff:ff:ff:ff:ff:ff")
-        actions_arp_broadcast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        # 优先级200: 所有ARP广播（允许）
+        match_arp_broadcast = parser.OFPMatch(eth_type=0x0806, eth_dst="ff:ff:ff:ff:ff:ff")
+        actions_arp_broadcast = [parser.OFPP_FLOOD]
         self.addFlow(datapath, 200, match_arp_broadcast, actions_arp_broadcast)
         
-        # 优先级150: 路由器ARP广播响应（允许）
-        match_router_arp_broadcast = parser.OFPMatch(eth_type=0x0806, eth_src=self.router_mac, eth_dst="ff:ff:ff:ff:ff:ff")
-        actions_router_arp_broadcast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 150, match_router_arp_broadcast, actions_router_arp_broadcast)
+        # 优先级150: 所有ARP单播（允许）
+        match_arp_unicast = parser.OFPMatch(eth_type=0x0806)
+        actions_arp_unicast = [parser.OFPP_FLOOD]
+        self.addFlow(datapath, 150, match_arp_unicast, actions_arp_unicast)
         
         # 优先级100: 设备到设备的流量（DROP）
         match_device_to_device = parser.OFPMatch(eth_src=device_mac)
