@@ -60,7 +60,7 @@ class HotelWifiController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packetInHandler(self, ev):
-        """数据包处理 - 详细记录流量和控制器动作"""
+        """数据包处理 - 仅记录流量，不处理转发（由预配置流表控制）"""
         msg = ev.msg
         datapath = msg.datapath
         
@@ -76,38 +76,21 @@ class HotelWifiController(app_manager.RyuApp):
         # 更新流量统计
         self.trafficMonitor.updateTraffic(srcMac, packet_len)
         
-        # 判断包类型和确定动作
+        # 仅记录数据包信息，不处理转发（由预配置流表控制）
         packet_type = "UNKNOWN"
-        action = "DROP"  # 默认动作
         
-        # 检查是否是ARP包
         if eth.ethertype == 0x0806:
             packet_type = "ARP"
-            action = "FORWARD"  # ARP流量被允许
         elif eth.ethertype == 0x0800:
             packet_type = "IPv4"
-            ip_pkt = pkt.get_protocol(ipv4.ipv4)
-            if ip_pkt:
-                # 检查是否是允许的MAC地址
-                if srcMac in ["00:00:00:00:00:01", "00:00:00:00:00:02", "00:00:00:00:00:03"] or \
-                   dstMac in ["00:00:00:00:00:01", "00:00:00:00:00:02", "00:00:00:00:00:03"] or \
-                   srcMac == "00:00:00:00:00:AA" or dstMac == "00:00:00:00:00:AA":
-                    action = "FORWARD"
-                else:
-                    action = "DROP"
         elif eth.ethertype == 0x86DD:
             packet_type = "IPv6"
-            action = "DROP"  # 默认DROP IPv6
-        elif eth.ethertype == 0x0806:
-            packet_type = "ARP"
-            action = "FORWARD"
         else:
             packet_type = f"OTHER(0x{eth.ethertype:04x})"
-            action = "FORWARD"  # 其他流量暂时允许
         
-        # 详细记录所有数据包信息和动作
+        # 记录数据包信息（不处理转发）
         self.logger.info("=" * 80)
-        self.logger.info("🚨 PACKET-IN 动作分析:")
+        self.logger.info("📊 PACKET-IN 监控记录:")
         self.logger.info("   📍 交换机: %016x", datapath.id)
         self.logger.info("   🔗 源MAC: %s", srcMac)
         self.logger.info("   🔗 目的MAC: %s", dstMac)
@@ -123,12 +106,5 @@ class HotelWifiController(app_manager.RyuApp):
                 self.logger.info("   🌐 目的IP: %s", ip_pkt.dst)
                 self.logger.info("   🔧 协议: %s", ip_pkt.proto)
         
-        # 明确显示动作
-        if action == "FORWARD":
-            self.logger.info("   ✅ 动作: FORWARD (允许通过)")
-        else:
-            self.logger.info("   ❌ 动作: DROP (被阻止)")
-        
-        # 记录控制器决策
-        self.logger.info("🎯 控制器决策: %s - %s", action, "流量被允许" if action == "FORWARD" else "流量被阻止")
+        self.logger.info("🎯 流量已记录 - 由预配置流表控制")
         self.logger.info("=" * 80)

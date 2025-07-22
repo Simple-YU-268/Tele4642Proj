@@ -1,6 +1,7 @@
 """流表管理模块 - 基于配额的动态流表控制"""
 
 from ryu.lib.packet import packet, ethernet, ether_types
+from ryu.ofproto import ofproto_v1_3
 from collections import defaultdict
 
 
@@ -105,30 +106,35 @@ class FlowManager:
         self.logger.info("📊 许可流表更新完成: %d个设备获得访问权限", permit_count)
     
     def addPermitFlowsForDevice(self, datapath, device_mac):
-        """为指定设备添加许可流表 - 默认DROP ICMP on top of ARP"""
+        """为指定设备添加许可流表 - 使用特定端口"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
+        # 基于Mininet拓扑的端口映射
+        # 假设标准端口分配：h1=1, h2=2, h3=3, router=4
+        
+        # 获取设备对应的端口（基于MAC地址）
+        device_port = self._getDevicePort(device_mac)
+        router_port = 4  # 路由器固定端口
+        
         # 优先级400: 设备到路由器的双向ICMP（配额许可）
-        # 允许设备到路由器的IPv4流量（包括ICMP）
         match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
-        actions_device_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        actions_device_to_router = [parser.OFPActionOutput(router_port)]
         self.addFlow(datapath, 400, match_device_to_router, actions_device_to_router)
         
         # 优先级400: 路由器到设备的双向ICMP（配额许可）
-        # 允许路由器到设备的IPv4流量（包括ICMP）
         match_router_to_device = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac, eth_type=0x0800)
-        actions_router_to_device = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        actions_router_to_device = [parser.OFPActionOutput(device_port)]
         self.addFlow(datapath, 400, match_router_to_device, actions_router_to_device)
         
         # 优先级300: 设备到路由器的ARP（允许）
         match_arp_to_router = parser.OFPMatch(eth_type=0x0806, eth_src=device_mac, eth_dst=self.router_mac)
-        actions_arp_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        actions_arp_to_router = [parser.OFPActionOutput(router_port)]
         self.addFlow(datapath, 300, match_arp_to_router, actions_arp_to_router)
         
         # 优先级300: 路由器到设备的ARP（允许）
         match_arp_from_router = parser.OFPMatch(eth_type=0x0806, eth_src=self.router_mac, eth_dst=device_mac)
-        actions_arp_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        actions_arp_from_router = [parser.OFPActionOutput(device_port)]
         self.addFlow(datapath, 300, match_arp_from_router, actions_arp_from_router)
         
         # 优先级200: 设备ARP广播（允许）
@@ -142,24 +148,34 @@ class FlowManager:
         self.addFlow(datapath, 100, match_device_to_device, actions_device_to_device)
         
         # 优先级50: 默认ICMP DROP（高于ARP）
-        # 默认DROP所有ICMP流量
         match_icmp_default = parser.OFPMatch(eth_type=0x0800)
         actions_icmp_default = []  # 空动作 = DROP
         self.addFlow(datapath, 50, match_icmp_default, actions_icmp_default)
+    
+    def _getDevicePort(self, device_mac):
+        """根据MAC地址返回对应的端口"""
+        port_mapping = {
+            "00:00:00:00:00:01": 2,  # h1 -> eth2
+            "00:00:00:00:00:02": 3,  # h2 -> eth3
+            "00:00:00:00:00:03": 4,  # h3 -> eth4
+            "00:00:00:00:00:AA": 1   # router -> eth1
+        }
+        return port_mapping.get(device_mac, ofproto_v1_3.OFPP_FLOOD)
     
     def removePermitFlowsForDevice(self, datapath, device_mac):
         """移除指定设备的ICMP许可流表 - 仅移除ICMP相关规则"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 仅删除ICMP相关的Priority 300规则
-        # 删除设备到路由器的IPv4 (ICMP)
-        match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
-        self.deleteFlow(datapath, 300, match_device_to_router)
+        device_port = self._getDevicePort(device_mac)
+        router_port = 4
         
-        # 删除路由器到设备的IPv4 (ICMP)
+        # 仅删除ICMP相关的Priority 400规则
+        match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
+        self.deleteFlow(datapath, 400, match_device_to_router)
+        
         match_router_to_device = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac, eth_type=0x0800)
-        self.deleteFlow(datapath, 300, match_router_to_device)
+        self.deleteFlow(datapath, 400, match_router_to_device)
         
         self.logger.info("🚫 移除设备%s的ICMP许可流表（保留ARP）", device_mac)
     
