@@ -115,7 +115,7 @@ class FlowManager:
         
         # 获取设备对应的端口（基于MAC地址）
         device_port = self._getDevicePort(device_mac)
-        router_port = 1  # 路由器固定端口
+        router_port = 1  # 路由器固定端口 (s1-eth1)
         
         # 优先级400: 设备到路由器的双向ICMP（配额许可）
         match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
@@ -147,10 +147,11 @@ class FlowManager:
         actions_device_to_device = []  # 空动作 = DROP
         self.addFlow(datapath, 100, match_device_to_device, actions_device_to_device)
         
-        # 优先级50: 默认ICMP DROP（高于ARP）
+        # 优先级1: 默认ICMP DROP（最低优先级，仅作为最后手段）
+        # 这个规则会被更具体的规则覆盖
         match_icmp_default = parser.OFPMatch(eth_type=0x0800)
         actions_icmp_default = []  # 空动作 = DROP
-        self.addFlow(datapath, 50, match_icmp_default, actions_icmp_default)
+        self.addFlow(datapath, 1, match_icmp_default, actions_icmp_default)
     
     def _getDevicePort(self, device_mac):
         """根据MAC地址返回对应的端口"""
