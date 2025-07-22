@@ -10,7 +10,7 @@ from ryu.controller.handler import MAIN_DISPATCHER, CONFIG_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.app.wsgi import WSGIApplication
-from ryu.lib.packet import packet, ethernet
+from ryu.lib.packet import packet, ethernet, ipv4, arp
 
 from modules.flow_manager import FlowManager
 from modules.quota_manager import QuotaManager
@@ -60,7 +60,7 @@ class HotelWifiController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packetInHandler(self, ev):
-        """数据包处理 - 仅记录流量，不主动处理转发"""
+        """数据包处理 - 详细记录流量和控制器动作"""
         msg = ev.msg
         datapath = msg.datapath
         
@@ -76,6 +76,59 @@ class HotelWifiController(app_manager.RyuApp):
         # 更新流量统计
         self.trafficMonitor.updateTraffic(srcMac, packet_len)
         
-        # 仅记录日志，不处理转发（所有流量由预配置的流表控制）
-        self.logger.debug("📦 数据包: %s → %s, 长度=%d字节, 端口=%d", 
-                         srcMac, dstMac, packet_len, inPort)
+        # 判断包类型和确定动作
+        packet_type = "UNKNOWN"
+        action = "DROP"  # 默认动作
+        
+        # 检查是否是ARP包
+        if eth.ethertype == 0x0806:
+            packet_type = "ARP"
+            action = "FORWARD"  # ARP流量被允许
+        elif eth.ethertype == 0x0800:
+            packet_type = "IPv4"
+            ip_pkt = pkt.get_protocol(ipv4.ipv4)
+            if ip_pkt:
+                # 检查是否是允许的MAC地址
+                if srcMac in ["00:00:00:00:00:01", "00:00:00:00:00:02", "00:00:00:00:00:03"] or \
+                   dstMac in ["00:00:00:00:00:01", "00:00:00:00:00:02", "00:00:00:00:00:03"] or \
+                   srcMac == "00:00:00:00:00:AA" or dstMac == "00:00:00:00:00:AA":
+                    action = "FORWARD"
+                else:
+                    action = "DROP"
+        elif eth.ethertype == 0x86DD:
+            packet_type = "IPv6"
+            action = "DROP"  # 默认DROP IPv6
+        elif eth.ethertype == 0x0806:
+            packet_type = "ARP"
+            action = "FORWARD"
+        else:
+            packet_type = f"OTHER(0x{eth.ethertype:04x})"
+            action = "FORWARD"  # 其他流量暂时允许
+        
+        # 详细记录所有数据包信息和动作
+        self.logger.info("=" * 80)
+        self.logger.info("🚨 PACKET-IN 动作分析:")
+        self.logger.info("   📍 交换机: %016x", datapath.id)
+        self.logger.info("   🔗 源MAC: %s", srcMac)
+        self.logger.info("   🔗 目的MAC: %s", dstMac)
+        self.logger.info("   🔌 入端口: %d", inPort)
+        self.logger.info("   📏 包长度: %d字节", packet_len)
+        self.logger.info("   🏷️  类型: %s", packet_type)
+        
+        # 如果是IPv4，显示IP信息
+        if eth.ethertype == 0x0800:
+            ip_pkt = pkt.get_protocol(ipv4.ipv4)
+            if ip_pkt:
+                self.logger.info("   🌐 源IP: %s", ip_pkt.src)
+                self.logger.info("   🌐 目的IP: %s", ip_pkt.dst)
+                self.logger.info("   🔧 协议: %s", ip_pkt.proto)
+        
+        # 明确显示动作
+        if action == "FORWARD":
+            self.logger.info("   ✅ 动作: FORWARD (允许通过)")
+        else:
+            self.logger.info("   ❌ 动作: DROP (被阻止)")
+        
+        # 记录控制器决策
+        self.logger.info("🎯 控制器决策: %s - %s", action, "流量被允许" if action == "FORWARD" else "流量被阻止")
+        self.logger.info("=" * 80)

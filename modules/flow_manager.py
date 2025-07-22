@@ -1,6 +1,6 @@
 """流表管理模块 - 基于配额的动态流表控制"""
 
-from ryu.lib.packet import packet, ethernet
+from ryu.lib.packet import packet, ethernet, ether_types
 from collections import defaultdict
 
 
@@ -31,8 +31,10 @@ class FlowManager:
         
         if actions:  # 有动作
             inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+            action_str = str(actions)
         else:  # 无动作（DROP）
             inst = []
+            action_str = "DROP"
         
         if bufferId:
             mod = parser.OFPFlowMod(datapath=datapath, buffer_id=bufferId,
@@ -41,8 +43,15 @@ class FlowManager:
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                     match=match, instructions=inst)
         
-        self.logger.info("📊 添加流表: 交换机=%016x, 优先级=%d, 匹配=%s, 动作=%s", 
-                        datapath.id, priority, match, "DROP" if not actions else actions)
+        # 详细记录流表安装信息
+        self.logger.info("=" * 60)
+        self.logger.info("🔄 FLOW-MOD 详细信息:")
+        self.logger.info("   交换机: %016x", datapath.id)
+        self.logger.info("   优先级: %d", priority)
+        self.logger.info("   匹配条件: %s", match)
+        self.logger.info("   动作: %s", action_str)
+        self.logger.info("   缓冲区ID: %s", bufferId if bufferId else "None")
+        self.logger.info("=" * 60)
         
         datapath.send_msg(mod)
     
@@ -100,15 +109,36 @@ class FlowManager:
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 优先级200: 设备到路由器的流量
-        match_up = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac)
+        # 优先级10: 允许所有流量（临时解决方案）
+        # 这将确保基本连通性，后续可以细化
+        match_any = parser.OFPMatch()
+        actions_any = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 10, match_any, actions_any)
+        
+        # 优先级50: 广播流量（允许所有广播）
+        match_broadcast = parser.OFPMatch(eth_dst="ff:ff:ff:ff:ff:ff")
+        actions_broadcast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 50, match_broadcast, actions_broadcast)
+        
+        # 优先级100: ARP流量（允许所有ARP）
+        match_arp = parser.OFPMatch(eth_type=0x0806)
+        actions_arp = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 100, match_arp, actions_arp)
+        
+        # 优先级200: 设备到路由器的流量（允许所有设备到路由器）
+        match_up = parser.OFPMatch(eth_dst=self.router_mac)
         actions_up = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
         self.addFlow(datapath, 200, match_up, actions_up)
         
-        # 优先级200: 路由器到设备的流量
-        match_down = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac)
+        # 优先级200: 路由器到设备的流量（允许路由器到所有设备）
+        match_down = parser.OFPMatch(eth_src=self.router_mac)
         actions_down = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
         self.addFlow(datapath, 200, match_down, actions_down)
+        
+        # 优先级300: 特定设备间流量（更精确的匹配）
+        match_device = parser.OFPMatch(eth_src=device_mac)
+        actions_device = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 300, match_device, actions_device)
     
     def removePermitFlowsForDevice(self, datapath, device_mac):
         """移除指定设备的许可流表"""
@@ -130,18 +160,19 @@ class FlowManager:
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 删除优先级200的流表（许可流表）
-        match_any = parser.OFPMatch()
-        mod = parser.OFPFlowMod(
-            datapath=datapath,
-            command=ofproto.OFPFC_DELETE,
-            priority=200,
-            match=match_any,
-            out_port=ofproto.OFPP_ANY,
-            out_group=ofproto.OFPG_ANY
-        )
+        # 删除优先级10-300的流表（包括允许所有流量的规则）
+        for priority in [10, 50, 100, 150, 200, 300]:
+            match_any = parser.OFPMatch()
+            mod = parser.OFPFlowMod(
+                datapath=datapath,
+                command=ofproto.OFPFC_DELETE,
+                priority=priority,
+                match=match_any,
+                out_port=ofproto.OFPP_ANY,
+                out_group=ofproto.OFPG_ANY
+            )
+            datapath.send_msg(mod)
         
-        datapath.send_msg(mod)
         self.logger.info("🧹 清除所有许可流表")
     
     def handlePacket(self, datapath, srcMac, dstMac, inPort, msg):

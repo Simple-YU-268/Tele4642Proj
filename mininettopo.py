@@ -18,7 +18,7 @@ def hotel_wifi_topology():
     h3 = net.addHost('h3', ip='10.0.0.3/24', mac='00:00:00:00:00:03')
 
     # 添加路由器（代替服务器）
-    router = net.addHost('router', ip='6.6.6.6/24', mac='00:00:00:00:00:AA')
+    router = net.addHost('router', ip='10.0.0.254/24', mac='00:00:00:00:00:AA')
     
     # 连接所有节点
     net.addLink(h1, s1)
@@ -30,12 +30,13 @@ def hotel_wifi_topology():
     net.start()
     
     # 配置主机的默认网关指向路由器
-    h1.cmd('route add default gw 6.6.6.6')
-    h2.cmd('route add default gw 6.6.6.6')
-    h3.cmd('route add default gw 6.6.6.6')
+    h1.cmd('route add default gw 10.0.0.254')
+    h2.cmd('route add default gw 10.0.0.254')
+    h3.cmd('route add default gw 10.0.0.254')
     
     # 配置路由器路由（仅启用IP转发，无NAT - 封闭系统）
     router.cmd('echo 1 > /proc/sys/net/ipv4/ip_forward')
+    router.cmd('ifconfig router-eth0 10.0.0.254/24')
     
     # 配置DNS服务器（可选，用于内部测试）
     h1.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
