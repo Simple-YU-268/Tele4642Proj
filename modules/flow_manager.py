@@ -105,63 +105,71 @@ class FlowManager:
         self.logger.info("📊 许可流表更新完成: %d个设备获得访问权限", permit_count)
     
     def addPermitFlowsForDevice(self, datapath, device_mac):
-        """为指定设备添加许可流表"""
+        """为指定设备添加许可流表 - 默认DROP ICMP on top of ARP"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 优先级10: 允许所有流量（临时解决方案）
-        # 这将确保基本连通性，后续可以细化
-        match_any = parser.OFPMatch()
-        actions_any = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 10, match_any, actions_any)
+        # 优先级400: 设备到路由器的双向ICMP（配额许可）
+        # 允许设备到路由器的IPv4流量（包括ICMP）
+        match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
+        actions_device_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 400, match_device_to_router, actions_device_to_router)
         
-        # 优先级50: 广播流量（允许所有广播）
-        match_broadcast = parser.OFPMatch(eth_dst="ff:ff:ff:ff:ff:ff")
-        actions_broadcast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 50, match_broadcast, actions_broadcast)
+        # 优先级400: 路由器到设备的双向ICMP（配额许可）
+        # 允许路由器到设备的IPv4流量（包括ICMP）
+        match_router_to_device = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac, eth_type=0x0800)
+        actions_router_to_device = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 400, match_router_to_device, actions_router_to_device)
         
-        # 优先级100: ARP流量（允许所有ARP）
-        match_arp = parser.OFPMatch(eth_type=0x0806)
-        actions_arp = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 100, match_arp, actions_arp)
+        # 优先级300: 设备到路由器的ARP（允许）
+        match_arp_to_router = parser.OFPMatch(eth_type=0x0806, eth_src=device_mac, eth_dst=self.router_mac)
+        actions_arp_to_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 300, match_arp_to_router, actions_arp_to_router)
         
-        # 优先级200: 设备到路由器的流量（允许所有设备到路由器）
-        match_up = parser.OFPMatch(eth_dst=self.router_mac)
-        actions_up = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 200, match_up, actions_up)
+        # 优先级300: 路由器到设备的ARP（允许）
+        match_arp_from_router = parser.OFPMatch(eth_type=0x0806, eth_src=self.router_mac, eth_dst=device_mac)
+        actions_arp_from_router = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 300, match_arp_from_router, actions_arp_from_router)
         
-        # 优先级200: 路由器到设备的流量（允许路由器到所有设备）
-        match_down = parser.OFPMatch(eth_src=self.router_mac)
-        actions_down = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 200, match_down, actions_down)
+        # 优先级200: 设备ARP广播（允许）
+        match_arp_broadcast = parser.OFPMatch(eth_type=0x0806, eth_src=device_mac, eth_dst="ff:ff:ff:ff:ff:ff")
+        actions_arp_broadcast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 200, match_arp_broadcast, actions_arp_broadcast)
         
-        # 优先级300: 特定设备间流量（更精确的匹配）
-        match_device = parser.OFPMatch(eth_src=device_mac)
-        actions_device = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 300, match_device, actions_device)
+        # 优先级100: 设备到设备的流量（DROP）
+        match_device_to_device = parser.OFPMatch(eth_src=device_mac)
+        actions_device_to_device = []  # 空动作 = DROP
+        self.addFlow(datapath, 100, match_device_to_device, actions_device_to_device)
+        
+        # 优先级50: 默认ICMP DROP（高于ARP）
+        # 默认DROP所有ICMP流量
+        match_icmp_default = parser.OFPMatch(eth_type=0x0800)
+        actions_icmp_default = []  # 空动作 = DROP
+        self.addFlow(datapath, 50, match_icmp_default, actions_icmp_default)
     
     def removePermitFlowsForDevice(self, datapath, device_mac):
-        """移除指定设备的许可流表"""
+        """移除指定设备的ICMP许可流表 - 仅移除ICMP相关规则"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 删除设备到路由器的流表
-        match_up = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac)
-        self.deleteFlow(datapath, 200, match_up)
+        # 仅删除ICMP相关的Priority 300规则
+        # 删除设备到路由器的IPv4 (ICMP)
+        match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
+        self.deleteFlow(datapath, 300, match_device_to_router)
         
-        # 删除路由器到设备的流表
-        match_down = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac)
-        self.deleteFlow(datapath, 200, match_down)
+        # 删除路由器到设备的IPv4 (ICMP)
+        match_router_to_device = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac, eth_type=0x0800)
+        self.deleteFlow(datapath, 300, match_router_to_device)
         
-        self.logger.info("🚫 移除设备%s的许可流表", device_mac)
+        self.logger.info("🚫 移除设备%s的ICMP许可流表（保留ARP）", device_mac)
     
     def clearPermitFlows(self, datapath):
         """清除所有许可流表（保留默认DROP）"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 删除优先级10-300的流表（包括允许所有流量的规则）
-        for priority in [10, 50, 100, 150, 200, 300]:
+        # 删除优先级100-200的流表（设备↔路由器通信）
+        for priority in [100, 150, 200]:
             match_any = parser.OFPMatch()
             mod = parser.OFPFlowMod(
                 datapath=datapath,
