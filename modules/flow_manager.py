@@ -142,6 +142,11 @@ class FlowManager:
         actions_arp_broadcast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
         self.addFlow(datapath, 200, match_arp_broadcast, actions_arp_broadcast)
         
+        # 优先级150: 路由器ARP广播响应（允许）
+        match_router_arp_broadcast = parser.OFPMatch(eth_type=0x0806, eth_src=self.router_mac, eth_dst="ff:ff:ff:ff:ff:ff")
+        actions_router_arp_broadcast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 150, match_router_arp_broadcast, actions_router_arp_broadcast)
+        
         # 优先级100: 设备到设备的流量（DROP）
         match_device_to_device = parser.OFPMatch(eth_src=device_mac)
         actions_device_to_device = []  # 空动作 = DROP
