@@ -34,11 +34,10 @@ def hotel_wifi_topology():
     h2.cmd('route add default gw 6.6.6.6')
     h3.cmd('route add default gw 6.6.6.6')
     
-    # 配置路由器路由
+    # 配置路由器路由（仅启用IP转发，无NAT - 封闭系统）
     router.cmd('echo 1 > /proc/sys/net/ipv4/ip_forward')
-    router.cmd('iptables -t nat -A POSTROUTING -s 10.0.0.0/24 -j MASQUERADE')
     
-    # 配置DNS服务器
+    # 配置DNS服务器（可选，用于内部测试）
     h1.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
     h2.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
     h3.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')

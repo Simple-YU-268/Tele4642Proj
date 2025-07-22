@@ -1,113 +1,86 @@
-"""REST API控制器模块"""
+"""API控制器 - 提供配额管理接口"""
 
-from webob import Response
 import json
-try:
-    from ryu.app.wsgi import ControllerBase, route
-except ImportError:
-    # 为了本地开发环境兼容性
-    class ControllerBase:
-        def __init__(self, req, link, data, **config):
-            pass
-    
-    def route(name, path, methods=None):
-        def decorator(func):
-            return func
-        return decorator
+from webob import Response
+from ryu.app.wsgi import ControllerBase, WSGIApplication
 
 
 class APIController(ControllerBase):
-    """REST API控制器"""
+    """API控制器 - 提供配额管理接口"""
     
     def __init__(self, req, link, data, **config):
         super(APIController, self).__init__(req, link, data, **config)
-        
-        self.whitelistManager = data['whitelistManager']
-        self.trafficMonitor = data['trafficMonitor']
+        self.quotaManager = data['quotaManager']
     
-    @staticmethod
-    def createResponse(data=None, status=200, message=None):
-        """创建标准响应"""
-        response = {
-            'status': status,
-            'message': message or ('success' if status == 200 else 'error'),
-            'data': data or {}
-        }
-        return Response(
-            body=json.dumps(response).encode('utf-8'),
-            status=status,
-            content_type='application/json; charset=utf-8'
-        )
+    def list_quota_status(self, req, **kwargs):
+        """获取所有设备的配额状态"""
+        status = self.quotaManager.getQuotaStatus()
+        return Response(content_type='application/json', body=json.dumps(status, indent=2))
     
-    def addToWhitelist(self, req, **kwargs):
-        """添加MAC地址到白名单"""
+    def add_quota(self, req, **kwargs):
+        """为设备增加配额"""
         try:
-            mac = req.json.get('mac')
-            if not mac:
-                return self.createResponse(status=400, message='MAC address is required')
+            data = json.loads(req.body)
+            mac_address = data.get('mac')
+            additional_gb = data.get('gb', 0)
             
-            if self.whitelistManager.addToWhitelist(mac):
-                return self.createResponse(message=f'MAC {mac} added to whitelist')
+            if not mac_address or additional_gb <= 0:
+                return Response(status=400, body=json.dumps({'error': 'Invalid parameters'}))
+            
+            bytes_to_add = additional_gb * 1024 * 1024 * 1024
+            success = self.quotaManager.addQuotaForDevice(mac_address, bytes_to_add)
+            
+            if success:
+                return Response(content_type='application/json', 
+                              body=json.dumps({'success': True, 'message': f'Added {additional_gb}GB to {mac_address}'}))
             else:
-                return self.createResponse(status=409, message=f'MAC {mac} already in whitelist')
+                return Response(status=404, body=json.dumps({'error': 'Device not found'}))
                 
         except Exception as e:
-            return self.createResponse(status=500, message=str(e))
+            return Response(status=500, body=json.dumps({'error': str(e)}))
     
-    def removeFromWhitelist(self, req, **kwargs):
-        """从白名单中移除MAC地址"""
+    def reset_traffic(self, req, **kwargs):
+        """重置设备流量使用"""
         try:
-            mac = req.json.get('mac')
-            if not mac:
-                return self.createResponse(status=400, message='MAC address is required')
+            data = json.loads(req.body)
+            mac_address = data.get('mac')
             
-            if self.whitelistManager.removeFromWhitelist(mac):
-                return self.createResponse(message=f'MAC {mac} removed from whitelist')
+            if not mac_address:
+                return Response(status=400, body=json.dumps({'error': 'MAC address required'}))
+            
+            success = self.quotaManager.resetDeviceTraffic(mac_address)
+            
+            if success:
+                return Response(content_type='application/json', 
+                              body=json.dumps({'success': True, 'message': f'Reset traffic for {mac_address}'}))
             else:
-                return self.createResponse(status=404, message=f'MAC {mac} not found in whitelist')
+                return Response(status=404, body=json.dumps({'error': 'Device not found'}))
                 
         except Exception as e:
-            return self.createResponse(status=500, message=str(e))
+            return Response(status=500, body=json.dumps({'error': str(e)}))
     
-    def getWhitelist(self, req, **kwargs):
-        """获取当前白名单"""
+    def update_flows(self, req, **kwargs):
+        """手动更新流表（用于购买流量后）"""
         try:
-            whitelist = self.whitelistManager.getWhitelist()
-            return self.createResponse(data={'whitelist': whitelist})
+            # 获取所有控制器实例
+            from ryu.base.app_manager import AppManager
+            app_mgr = AppManager.get_instance()
+            controller = None
+            
+            for app in app_mgr.applications.values():
+                if hasattr(app, 'flowManager'):
+                    controller = app
+                    break
+            
+            if controller:
+                # 更新所有交换机的流表
+                for dp in app_mgr.datapaths.values():
+                    controller.flowManager.updateQuotaBasedFlows(dp, controller.quotaManager)
+                
+                return Response(content_type='application/json', 
+                              body=json.dumps({'success': True, 'message': 'Flows updated'}))
+            else:
+                return Response(status=500, body=json.dumps({'error': 'Controller not found'}))
+                
         except Exception as e:
-            return self.createResponse(status=500, message=str(e))
-    
-    def getTrafficStats(self, req, **kwargs):
-        """获取流量统计"""
-        try:
-            mac = req.params.get('mac')
-            stats = self.trafficMonitor.getTraffic(mac)
-            return self.createResponse(data=stats)
-        except Exception as e:
-            return self.createResponse(status=500, message=str(e))
-    
-    def getTopUsers(self, req, **kwargs):
-        """获取流量使用最多的用户"""
-        try:
-            limit = int(req.params.get('limit', 10))
-            topUsers = self.trafficMonitor.getTopUsers(limit)
-            return self.createResponse(data={'topUsers': topUsers})
-        except Exception as e:
-            return self.createResponse(status=500, message=str(e))
-
-
-# 注册路由
-try:
-    from ryu.app.wsgi import route
-    
-    APIController.route = route
-    
-    # 注册路由
-    APIController.route('api', '/addToWhitelist', methods=['POST'])(APIController.addToWhitelist)
-    APIController.route('api', '/removeFromWhitelist', methods=['POST'])(APIController.removeFromWhitelist)
-    APIController.route('api', '/whitelist', methods=['GET'])(APIController.getWhitelist)
-    APIController.route('api', '/traffic', methods=['GET'])(APIController.getTrafficStats)
-    APIController.route('api', '/topUsers', methods=['GET'])(APIController.getTopUsers)
-except ImportError:
-    # 如果ryu不可用，跳过路由注册
-    pass
+            return Response(status=500, body=json.dumps({'error': str(e)}))

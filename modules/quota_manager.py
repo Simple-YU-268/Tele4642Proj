@@ -1,4 +1,4 @@
-"""配额管理模块 - 数据使用完切断联网"""
+"""配额管理模块 - 基于流量配额的动态控制"""
 
 import json
 import os
@@ -6,12 +6,11 @@ from threading import Lock
 
 
 class QuotaManager:
-    """配额管理器 - 监控用户数据使用情况并控制网络访问"""
+    """配额管理器 - 监控用户数据使用情况并动态控制流表"""
     
-    def __init__(self, logger, flow_manager, whitelist_manager):
+    def __init__(self, logger, flow_manager):
         self.logger = logger
         self.flowManager = flow_manager
-        self.whitelistManager = whitelist_manager
         
         self.userDataFile = 'user_data.json'
         self.lock = Lock()
@@ -36,136 +35,60 @@ class QuotaManager:
         except Exception as e:
             self.logger.error("Error saving user data: %s", str(e))
     
-    def getUserTraffic(self, mac_address):
-        """从user_data.json获取用户的流量使用情况"""
+    def getDevicesWithQuota(self):
+        """获取所有有剩余配额的设备"""
         user_data = self.loadUserData()
+        devices_with_quota = []
         
-        for room_number, user_info in user_data.get('users', {}).items():
-            if mac_address in user_info.get('devices', []):
-                return {
-                    'room_number': room_number,
-                    'quota': user_info.get('quota', 0),
-                    'used': user_info.get('used_traffic', 0)
-                }
-        
-        return None
-    
-    def updateUserTraffic(self, mac_address, bytes_count):
-        """更新用户在user_data.json中的流量使用"""
-        user_data = self.loadUserData()
-        
-        for room_number, user_info in user_data.get('users', {}).items():
-            if mac_address in user_info.get('devices', []):
-                current_used = user_info.get('used_traffic', 0)
-                user_info['used_traffic'] = current_used + bytes_count
-                
-                self.saveUserData(user_data)
-                self.logger.debug("Updated user %s traffic: +%d bytes (total: %d)", 
-                                room_number, bytes_count, user_info['used_traffic'])
-                return True
-        
-        return False
-    
-    def checkUserQuota(self, mac_address):
-        """检查用户配额是否已用完"""
-        user_info = self.getUserTraffic(mac_address)
-        if not user_info:
-            return True  # 未找到用户，允许访问
-        
-        quota = user_info['quota']
-        used = user_info['used']
-        
-        self.logger.debug("User %s: quota=%d, used=%d", 
-                        user_info['room_number'], quota, used)
-        
-        if quota > 0 and used >= quota:
-            self.logger.warning("User %s quota exceeded: %d/%d bytes", 
-                              user_info['room_number'], used, quota)
-            return False  # 配额已用完
-        
-        return True  # 配额未用完
-    
-    def blockUser(self, datapath, mac_address):
-        """阻止用户网络访问（同时阻止上行和下行流量）"""
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        
-        # 阻止上行流量（该MAC作为源地址）
-        match_up = parser.OFPMatch(eth_src=mac_address)
-        actions = []  # 空动作表示丢弃
-        self.flowManager.addFlow(datapath, 1000, match_up, actions)
-        
-        # 阻止下行流量（该MAC作为目的地址）
-        match_down = parser.OFPMatch(eth_dst=mac_address)
-        self.flowManager.addFlow(datapath, 1000, match_down, actions)
-        
-        # 从白名单中移除
-        self.whitelistManager.removeFromWhitelist(mac_address)
-        
-        self.logger.info("Blocked user with MAC: %s (both uplink and downlink)", mac_address)
-
-    def unblockUser(self, datapath, mac_address):
-        """解除用户网络访问限制（删除之前设置的drop流表）"""
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        
-        # 删除阻止上行流量的流表项
-        match_up = parser.OFPMatch(eth_src=mac_address)
-        self.flowManager.deleteFlow(datapath, 1000, match_up)
-        
-        # 删除阻止下行流量的流表项
-        match_down = parser.OFPMatch(eth_dst=mac_address)
-        self.flowManager.deleteFlow(datapath, 1000, match_down)
-        
-        # 重新添加到白名单
-        self.whitelistManager.addToWhitelist(mac_address)
-        
-        self.logger.info("Unblocked user with MAC: %s (removed drop flows)", mac_address)
-    
-    def monitorQuotaUsage(self, datapath, mac_address, bytes_count):
-        """监控用户配额使用情况"""
-        # 更新流量使用
-        self.updateUserTraffic(mac_address, bytes_count)
-        
-        # 检查配额
-        if not self.checkUserQuota(mac_address):
-            self.blockUser(datapath, mac_address)
-            return False
-        return True
-    
-    def getUserQuotaInfo(self, mac_address):
-        """获取用户配额信息 - 修复路由器MAC处理"""
-        user_data = self.loadUserData()
-        
-        # 特殊处理路由器MAC - 始终返回有效配额
-        if mac_address == "00:00:00:00:00:AA":
-            return {
-                'room_number': 'router',
-                'quota': 9223372036854775807,
-                'used_traffic': 0
-            }
-        
-        # 检查MAC地址是否在设备列表中
         for room_number, user_info in user_data.get('users', {}).items():
             devices = user_info.get('devices', [])
-            if mac_address in devices:
-                return {
-                    'room_number': room_number,
-                    'quota': user_info.get('quota', 0),
-                    'used_traffic': user_info.get('used_traffic', 0)
-                }
+            quota = user_info.get('quota', 0)
+            used = user_info.get('used_traffic', 0)
+            
+            remaining = quota - used
+            if remaining > 0:
+                for device_mac in devices:
+                    devices_with_quota.append({
+                        'mac': device_mac,
+                        'room': room_number,
+                        'remaining': remaining
+                    })
         
-        return None
+        return devices_with_quota
     
-    def resetUserTraffic(self, mac_address):
-        """重置用户流量使用（用于测试或新周期）"""
+    def addQuotaForDevice(self, mac_address, additional_bytes):
+        """为设备增加配额（购买流量）"""
         user_data = self.loadUserData()
         
         for room_number, user_info in user_data.get('users', {}).items():
             if mac_address in user_info.get('devices', []):
-                user_info['used_traffic'] = 0
+                current_quota = user_info.get('quota', 0)
+                user_info['quota'] = current_quota + additional_bytes
+                
                 self.saveUserData(user_data)
-                self.logger.info("Reset traffic for user %s", room_number)
+                self.logger.info("为房间%s设备%s增加配额: +%.1fGB", 
+                               room_number, mac_address, additional_bytes / (1024**3))
                 return True
         
         return False
+    
+    def getQuotaStatus(self):
+        """获取所有设备的配额状态"""
+        user_data = self.loadUserData()
+        status = {}
+        
+        for room_number, user_info in user_data.get('users', {}).items():
+            devices = user_info.get('devices', [])
+            quota = user_info.get('quota', 0)
+            used = user_info.get('used_traffic', 0)
+            
+            for device_mac in devices:
+                status[device_mac] = {
+                    'room': room_number,
+                    'quota': quota,
+                    'used': used,
+                    'remaining': quota - used,
+                    'has_quota': (quota - used) > 0
+                }
+        
+        return status

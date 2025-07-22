@@ -1,32 +1,38 @@
-"""流表管理模块"""
+"""流表管理模块 - 基于配额的动态流表控制"""
 
 from ryu.lib.packet import packet, ethernet
 from collections import defaultdict
 
 
 class FlowManager:
-    """流表管理器"""
+    """流表管理器 - 默认DROP，根据配额动态下发许可流表"""
     
     def __init__(self, logger):
         self.logger = logger
         self.macToPort = defaultdict(dict)
+        self.router_mac = "00:00:00:00:00:AA"
     
-    def installDefaultFlow(self, datapath):
-        """安装默认流表项"""
+    def installDefaultDropFlows(self, datapath):
+        """安装默认DROP流表 - 阻止所有流量"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
+        # 默认DROP所有流量
         match = parser.OFPMatch()
-        actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)]
+        actions = []  # 空动作表示丢弃
         
+        self.logger.info("🚫 安装默认DROP流表: 交换机=%016x", datapath.id)
         self.addFlow(datapath, 0, match, actions)
     
     def addFlow(self, datapath, priority, match, actions, bufferId=None):
-        """添加流表项 - 带日志输出"""
+        """添加流表项"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        if actions:  # 有动作
+            inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
+        else:  # 无动作（DROP）
+            inst = []
         
         if bufferId:
             mod = parser.OFPFlowMod(datapath=datapath, buffer_id=bufferId,
@@ -35,51 +41,16 @@ class FlowManager:
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                     match=match, instructions=inst)
         
-        # 打印流表添加信息
         self.logger.info("📊 添加流表: 交换机=%016x, 优先级=%d, 匹配=%s, 动作=%s", 
-                        datapath.id, priority, match, actions)
+                        datapath.id, priority, match, "DROP" if not actions else actions)
         
         datapath.send_msg(mod)
-    
-    def handlePacket(self, datapath, srcMac, dstMac, inPort, msg):
-        """处理数据包转发"""
-        dpid = datapath.id
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        
-        # 学习MAC地址
-        self.macToPort[dpid][srcMac] = inPort
-        
-        # 确定输出端口
-        outPort = self.macToPort[dpid].get(dstMac, ofproto.OFPP_FLOOD)
-        
-        # 创建动作
-        actions = [parser.OFPActionOutput(outPort)]
-        
-        # 添加流表项（非洪泛情况）
-        if outPort != ofproto.OFPP_FLOOD:
-            match = parser.OFPMatch(in_port=inPort, eth_dst=dstMac)
-            self.addFlow(datapath, 1, match, actions, msg.buffer_id)
-            
-            if msg.buffer_id != ofproto.OFP_NO_BUFFER:
-                return
-        
-        # 发送数据包
-        data = msg.data if msg.buffer_id == ofproto.OFP_NO_BUFFER else None
-        out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
-                                  in_port=inPort, actions=actions, data=data)
-        datapath.send_msg(out)
-    
-    def getMacTable(self, dpid):
-        """获取MAC地址表"""
-        return dict(self.macToPort.get(dpid, {}))
     
     def deleteFlow(self, datapath, priority, match):
         """删除流表项"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 创建删除流表项的消息
         mod = parser.OFPFlowMod(
             datapath=datapath,
             command=ofproto.OFPFC_DELETE,
@@ -90,163 +61,90 @@ class FlowManager:
         )
         
         datapath.send_msg(mod)
-        self.logger.info("Deleted flow with priority %d for match %s", priority, match)
-
-    def handleTrafficControl(self, datapath, srcMac, dstMac, inPort, msg, user_info):
-        """最终配额控制 - 路由器无配额，主机有配额才能通信"""
+        self.logger.info("🗑️  删除流表: 优先级=%d, 匹配=%s", priority, match)
+    
+    def updateQuotaBasedFlows(self, datapath, quotaManager):
+        """根据配额状态更新许可流表"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 路由器MAC地址
-        router_mac = "00:00:00:00:00:AA"
-        
-        # 特殊处理路由器通信（广播、多播等）
-        if srcMac.lower() == router_mac.lower() or dstMac.lower() == router_mac.lower():
-            # 路由器通信直接允许
-            self.logger.info("🌐 路由器通信: %s → %s", srcMac, dstMac)
-            self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-            return
-            
-        # 处理多播/广播流量
-        if dstMac.startswith("33:33:") or dstMac == "ff:ff:ff:ff:ff:ff":
-            self.logger.info("📡 广播/多播流量: %s → %s", srcMac, dstMac)
-            self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-            return
-        
-        # 获取用户数据 - 容错处理
-        try:
-            users = {}
-            if user_info and isinstance(user_info, dict):
-                users = user_info.get('users', {})
-            elif user_info is None:
-                # 如果user_info为None，尝试从文件读取
-                import json
-                try:
-                    with open('user_data.json', 'r') as f:
-                        data = json.load(f)
-                        users = data.get('users', {})
-                except:
-                    users = {}
-            
-            if not isinstance(users, dict):
-                users = {}
-            
-            # 检查源MAC的配额
-            src_has_quota = False
-            # 检查目的MAC的配额
-            dst_has_quota = False
-            
-            # 遍历用户数据检查设备配额
-            for room_number, room_info in users.items():
-                if not isinstance(room_info, dict):
-                    continue
-                    
-                devices = room_info.get('devices', [])
-                if not isinstance(devices, list):
-                    continue
-                
-                quota = room_info.get('quota', 0)
-                
-                # 检查源MAC
-                if srcMac in devices and quota > 0:
-                    src_has_quota = True
-                
-                # 检查目的MAC
-                if dstMac in devices and quota > 0:
-                    dst_has_quota = True
-            
-            # 允许路由器与任何设备的通信
-            if srcMac.lower() == router_mac.lower() or dstMac.lower() == router_mac.lower():
-                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-                return
-            
-            # 允许有配额的设备通信
-            if src_has_quota and dst_has_quota:
-                self.logger.info("✅ 允许通信: %s ↔ %s (都有配额)", srcMac, dstMac)
-                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-                return
-            elif src_has_quota and dstMac.lower() == router_mac.lower():
-                self.logger.info("✅ 允许访问路由器: %s → %s", srcMac, dstMac)
-                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-                return
-            elif srcMac.lower() == router_mac.lower() and dst_has_quota:
-                self.logger.info("✅ 路由器响应: %s → %s", srcMac, dstMac)
-                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-                return
-            else:
-                # 记录但不阻止，允许基础网络发现
-                if not src_has_quota and srcMac.lower() != router_mac.lower():
-                    self.logger.debug("⚠️  源设备 %s 无配额", srcMac)
-                if not dst_has_quota and dstMac.lower() != router_mac.lower() and not dstMac.startswith("33:33:"):
-                    self.logger.debug("⚠️  目的设备 %s 无配额", dstMac)
-                
-                # 允许基础网络发现流量
-                self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-                return
-                
-        except Exception as e:
-            self.logger.error("❌ 处理流量控制时出错: %s", str(e))
-            # 出错时允许流量通过，避免网络中断
-            self.handlePacket(datapath, srcMac, dstMac, inPort, msg)
-
-    def initializeSwitchFlows(self, datapath, quotaManager):
-        """交换机初始化 - 下发现有设备的流表"""
-        # 安装默认流表
-        self.installDefaultFlow(datapath)
-        
-        # 立即检查并下发现有设备的流表
-        self.logger.info("🚀 立即检查并下发现有设备的流表...")
-        
-        # 从quotaManager获取用户数据
-        if hasattr(quotaManager, 'loadUserData'):
-            user_data = quotaManager.loadUserData()
-        else:
-            # 兼容旧版本，直接读取文件
-            import json
-            try:
-                with open('user_data.json', 'r') as f:
-                    user_data = json.load(f)
-            except:
-                user_data = {'users': {}}
-        
+        # 获取用户数据
+        user_data = quotaManager.loadUserData()
         users = user_data.get('users', {})
         
-        # 路由器MAC地址
-        router_mac = "00:00:00:00:00:AA"
+        self.logger.info("🔄 根据配额更新许可流表...")
         
-        # 为每个有配额的设备下发流表
-        for room_number, room_info in users.items():
-            devices = room_info.get('devices', [])
-            quota = room_info.get('quota', 0)
+        # 清除所有现有许可流表（保留默认DROP）
+        self.clearPermitFlows(datapath)
+        
+        # 为每个有配额的设备下发许可流表
+        permit_count = 0
+        for room_number, user_info in users.items():
+            devices = user_info.get('devices', [])
+            quota = user_info.get('quota', 0)
+            used = user_info.get('used_traffic', 0)
             
-            if quota > 0:
+            remaining = quota - used
+            
+            if remaining > 0:
                 for device_mac in devices:
-                    self.logger.info("   📊 为设备 %s 下发许可流表 (配额: %.1fGB)", 
-                                   device_mac, quota / (1024**3))
-                    
-                    # 立即下发流表
-                    parser = datapath.ofproto_parser
-                    ofproto = datapath.ofproto
-                    
-                    # 更精确的流表规则 - 使用FLOOD进行广播学习
-                    
-                    # 允许设备到任何目的地的流量
-                    match_any_dst = parser.OFPMatch(eth_src=device_mac)
-                    actions_any_dst = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_any_dst, actions_any_dst)
-                    
-                    # 允许任何源到设备的流量
-                    match_any_src = parser.OFPMatch(eth_dst=device_mac)
-                    actions_any_src = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                    self.addFlow(datapath, 100, match_any_src, actions_any_src)
-                    
-                    # 允许设备间的直接通信
-                    for other_device in devices:
-                        if other_device != device_mac:
-                            # 设备到设备
-                            match_device_to_device = parser.OFPMatch(
-                                eth_src=device_mac, eth_dst=other_device)
-                            actions_device_to_device = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-                            self.addFlow(datapath, 110, match_device_to_device, actions_device_to_device)
+                    self.addPermitFlowsForDevice(datapath, device_mac)
+                    permit_count += 1
+                    self.logger.info("   ✅ 房间%s设备%s: 剩余%.1fGB", 
+                                   room_number, device_mac, remaining / (1024**3))
         
-        self.logger.info("✅ 初始流表下发完成")
+        self.logger.info("📊 许可流表更新完成: %d个设备获得访问权限", permit_count)
+    
+    def addPermitFlowsForDevice(self, datapath, device_mac):
+        """为指定设备添加许可流表"""
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        
+        # 优先级200: 设备到路由器的流量
+        match_up = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac)
+        actions_up = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 200, match_up, actions_up)
+        
+        # 优先级200: 路由器到设备的流量
+        match_down = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac)
+        actions_down = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        self.addFlow(datapath, 200, match_down, actions_down)
+    
+    def removePermitFlowsForDevice(self, datapath, device_mac):
+        """移除指定设备的许可流表"""
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        
+        # 删除设备到路由器的流表
+        match_up = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac)
+        self.deleteFlow(datapath, 200, match_up)
+        
+        # 删除路由器到设备的流表
+        match_down = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac)
+        self.deleteFlow(datapath, 200, match_down)
+        
+        self.logger.info("🚫 移除设备%s的许可流表", device_mac)
+    
+    def clearPermitFlows(self, datapath):
+        """清除所有许可流表（保留默认DROP）"""
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        
+        # 删除优先级200的流表（许可流表）
+        match_any = parser.OFPMatch()
+        mod = parser.OFPFlowMod(
+            datapath=datapath,
+            command=ofproto.OFPFC_DELETE,
+            priority=200,
+            match=match_any,
+            out_port=ofproto.OFPP_ANY,
+            out_group=ofproto.OFPG_ANY
+        )
+        
+        datapath.send_msg(mod)
+        self.logger.info("🧹 清除所有许可流表")
+    
+    def handlePacket(self, datapath, srcMac, dstMac, inPort, msg):
+        """处理数据包转发（备用，主要逻辑在updateQuotaBasedFlows）"""
+        # 此方法现在主要用于调试，实际流量由预配置的流表控制
+        pass
