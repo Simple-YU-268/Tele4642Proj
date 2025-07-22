@@ -146,12 +146,12 @@ class FlowManager:
         
         # 优先级200: 所有ARP广播（允许）
         match_arp_broadcast = parser.OFPMatch(eth_type=0x0806, eth_dst="ff:ff:ff:ff:ff:ff")
-        actions_arp_broadcast = [parser.OFPP_FLOOD]
+        actions_arp_broadcast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
         self.addFlow(datapath, 200, match_arp_broadcast, actions_arp_broadcast)
         
         # 优先级150: 所有ARP单播（允许）
         match_arp_unicast = parser.OFPMatch(eth_type=0x0806)
-        actions_arp_unicast = [parser.OFPP_FLOOD]
+        actions_arp_unicast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
         self.addFlow(datapath, 150, match_arp_unicast, actions_arp_unicast)
         
         # 优先级100: 设备到设备的流量（DROP）
