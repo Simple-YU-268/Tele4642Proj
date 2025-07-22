@@ -155,10 +155,10 @@ class FlowManager:
     def _getDevicePort(self, device_mac):
         """根据MAC地址返回对应的端口"""
         port_mapping = {
-            "00:00:00:00:00:01": 2,  # h1 -> eth2
-            "00:00:00:00:00:02": 3,  # h2 -> eth3
-            "00:00:00:00:00:03": 4,  # h3 -> eth4
-            "00:00:00:00:00:AA": 1   # router -> eth1
+            "00:00:00:00:00:01": 2,  # h1 -> s1-eth2
+            "00:00:00:00:00:02": 3,  # h2 -> s1-eth3
+            "00:00:00:00:00:03": 4,  # h3 -> s1-eth4
+            "00:00:00:00:00:AA": 1   # router -> s1-eth1
         }
         return port_mapping.get(device_mac, ofproto_v1_3.OFPP_FLOOD)
     
@@ -168,7 +168,7 @@ class FlowManager:
         parser = datapath.ofproto_parser
         
         device_port = self._getDevicePort(device_mac)
-        router_port = 4
+        router_port = 1
         
         # 仅删除ICMP相关的Priority 400规则
         match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
@@ -184,8 +184,8 @@ class FlowManager:
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 删除优先级100-200的流表（设备↔路由器通信）
-        for priority in [100, 150, 200]:
+        # 删除优先级50-400的流表（保留默认DROP）
+        for priority in [50, 100, 150, 200, 300, 400]:
             match_any = parser.OFPMatch()
             mod = parser.OFPFlowMod(
                 datapath=datapath,
