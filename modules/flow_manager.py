@@ -110,12 +110,12 @@ class FlowManager:
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 基于Mininet拓扑的端口映射
-        # 假设标准端口分配：h1=1, h2=2, h3=3, router=4
+        # 基于Mininet拓扑的端口映射# 假设标准端口分配：h1=2, h2=3, h3=4, router=1
+        
         
         # 获取设备对应的端口（基于MAC地址）
         device_port = self._getDevicePort(device_mac)
-        router_port = 4  # 路由器固定端口
+        router_port = 1  # 路由器固定端口
         
         # 优先级400: 设备到路由器的双向ICMP（配额许可）
         match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
