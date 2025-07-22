@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 酒店WiFi网络控制器 - 基于流量配额的动态流表控制
-新逻辑：默认DROP所有流量，根据配额动态下发许可流表
+模块化版本：默认DROP所有流量，根据配额动态下发许可流表
 """
 
 from ryu.base import app_manager
@@ -14,6 +14,7 @@ from ryu.lib.packet import packet, ethernet
 
 from modules.flow_manager import FlowManager
 from modules.quota_manager import QuotaManager
+from modules.traffic_monitor import TrafficMonitor
 from modules.api_controller import APIController
 
 
@@ -26,14 +27,16 @@ class HotelWifiController(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(HotelWifiController, self).__init__(*args, **kwargs)
         
-        # 初始化核心模块 - 仅保留流表管理和配额管理
+        # 初始化模块化组件
         self.flowManager = FlowManager(self.logger)
-        self.quotaManager = QuotaManager(self.logger, self.flowManager, None)
+        self.quotaManager = QuotaManager(self.logger, self.flowManager)
+        self.trafficMonitor = TrafficMonitor(self.logger, self.quotaManager)
         
         # 注册API控制器
         wsgi = kwargs['wsgi']
         wsgi.register(APIController, {
-            'quotaManager': self.quotaManager
+            'quotaManager': self.quotaManager,
+            'trafficMonitor': self.trafficMonitor
         })
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
@@ -57,7 +60,7 @@ class HotelWifiController(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packetInHandler(self, ev):
-        """数据包处理 - 仅记录，不主动处理"""
+        """数据包处理 - 仅记录流量，不主动处理转发"""
         msg = ev.msg
         datapath = msg.datapath
         
@@ -68,6 +71,11 @@ class HotelWifiController(app_manager.RyuApp):
         srcMac = eth.src
         dstMac = eth.dst
         inPort = msg.match['in_port']
+        packet_len = len(msg.data)
         
-        # 仅记录日志，不处理（所有流量由预配置的流表控制）
-        self.logger.debug("📦 DROP数据包: %s → %s, 端口=%d", srcMac, dstMac, inPort)
+        # 更新流量统计
+        self.trafficMonitor.updateTraffic(srcMac, packet_len)
+        
+        # 仅记录日志，不处理转发（所有流量由预配置的流表控制）
+        self.logger.debug("📦 数据包: %s → %s, 长度=%d字节, 端口=%d", 
+                         srcMac, dstMac, packet_len, inPort)

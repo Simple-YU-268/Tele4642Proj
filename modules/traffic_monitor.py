@@ -1,4 +1,4 @@
-"""流量监控模块"""
+"""流量监控模块 - 基于配额的流量统计"""
 
 import json
 import os
@@ -8,10 +8,11 @@ from collections import defaultdict
 
 
 class TrafficMonitor:
-    """设备流量监控器"""
+    """设备流量监控器 - 与配额系统集成"""
     
-    def __init__(self, logger):
+    def __init__(self, logger, quota_manager):
         self.logger = logger
+        self.quotaManager = quota_manager
         self.deviceTraffic = defaultdict(int)
         self.dailyTraffic = defaultdict(int)
         self.lock = Lock()
@@ -43,11 +44,16 @@ class TrafficMonitor:
             self.logger.error("Error saving traffic stats: %s", str(e))
     
     def updateTraffic(self, mac, bytesCount):
-        """更新设备流量统计"""
+        """更新设备流量统计并同步到配额系统"""
         with self.lock:
             self.deviceTraffic[mac] += bytesCount
             self.dailyTraffic[mac] += bytesCount
+            
+            # 同步更新配额系统的流量使用
+            self.quotaManager.updateUserTraffic(mac, bytesCount)
+            
             self.logger.debug("Device %s traffic updated: +%d bytes", mac, bytesCount)
+            self.saveTrafficStats()
     
     def getTraffic(self, mac=None):
         """获取设备流量统计"""
@@ -75,3 +81,19 @@ class TrafficMonitor:
             sortedUsers = sorted(self.deviceTraffic.items(), 
                                key=lambda x: x[1], reverse=True)[:limit]
             return sortedUsers
+    
+    def getQuotaBasedTraffic(self):
+        """获取基于配额的流量统计"""
+        quota_status = self.quotaManager.getQuotaStatus()
+        traffic_data = {}
+        
+        for mac, quota_info in quota_status.items():
+            traffic_data[mac] = {
+                'traffic': {
+                    'total': self.deviceTraffic.get(mac, 0),
+                    'daily': self.dailyTraffic.get(mac, 0)
+                },
+                'quota': quota_info
+            }
+        
+        return traffic_data
