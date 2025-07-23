@@ -14,17 +14,130 @@ class FlowManager:
         self.macToPort = defaultdict(dict)
         self.router_mac = "00:00:00:00:00:AA"
     
-    def installDefaultDropFlows(self, datapath):
-        """安装默认DROP流表 - 阻止所有流量"""
+    # ================================================================================
+    # 基础流表安装
+    # ================================================================================
+    
+    def installDefaultFlows(self, datapath):
+        """安装基础流表结构"""
+        self.logger.info("🔧 开始安装基础流表结构...")
+        
+        # 1. 安装默认流表（table-miss + ARP）
+        self._installTableMissFlow(datapath)
+        self._installArpFlows(datapath)
+        
+        self.logger.info("✅ 基础流表安装完成")
+    
+    def _installTableMissFlow(self, datapath):
+        """安装table-miss流表：丢弃所有未匹配流量"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-        # 默认DROP所有流量
+        # (0) Table-miss: drop everything else
         match = parser.OFPMatch()
         actions = []  # 空动作表示丢弃
         
-        self.logger.info("🚫 安装默认DROP流表: 交换机=%016x", datapath.id)
+        self.logger.info("🚫 安装table-miss DROP流表: 交换机=%016x", datapath.id)
         self.addFlow(datapath, 0, match, actions)
+    
+    def _installArpFlows(self, datapath):
+        """安装ARP相关流表 - 仅一个通用ARP规则"""
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        
+        # (1) Allow all ARP traffic - 通用ARP许可
+        match = parser.OFPMatch(eth_type=0x0806)
+        actions = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        
+        self.logger.info("✅ 安装ARP通用许可流表: 交换机=%016x", datapath.id)
+        self.addFlow(datapath, 1, match, actions)
+    
+    # ================================================================================
+    # 配额相关流表管理
+    # ================================================================================
+    
+    def updateQuotaBasedFlows(self, datapath, quotaManager):
+        """根据配额状态更新许可流表"""
+        self.logger.info("🔄 开始根据配额更新许可流表...")
+        
+        # 1. 清除所有现有配额相关流表（保留基础流表）
+        self._clearQuotaFlows(datapath)
+        
+        # 2. 获取用户数据
+        user_data = quotaManager.loadUserData()
+        users = user_data.get('users', {})
+        
+        # 3. 为每个有配额的设备下发许可流表
+        permit_count = 0
+        for room_number, user_info in users.items():
+            devices = user_info.get('devices', [])
+            quota = user_info.get('quota', 0)
+            used = user_info.get('used_traffic', 0)
+            
+            remaining = quota - used
+            
+            if remaining > 0:
+                for device_mac in devices:
+                    self._installDevicePermitFlows(datapath, device_mac)
+                    permit_count += 1
+                    self.logger.info("   ✅ 房间%s设备%s: 剩余%.1fGB", 
+                                   room_number, device_mac, remaining / (1024**3))
+        
+        self.logger.info("📊 许可流表更新完成: %d个设备获得访问权限", permit_count)
+    
+    def _installDevicePermitFlows(self, datapath, device_mac):
+        """为指定设备安装配额许可流表 - 仅IP流量，ICMP包含在IP中"""
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        
+        device_port = self._getDevicePort(device_mac)
+        router_port = 1  # 路由器固定端口
+        
+        # 优先级层次（从高到低）：
+        # 400: 设备-路由器双向IP（包含ICMP，配额许可）
+        # 1:   ARP（基础流表已处理）
+        # 0:   table-miss drop（基础流表已处理）
+        
+        # 400: 设备到路由器的IP（包含ICMP，配额许可）
+        match = parser.OFPMatch(
+            eth_src=device_mac, 
+            eth_dst=self.router_mac, 
+            eth_type=0x0800  # IPv4（包含ICMP、TCP、UDP等）
+        )
+        actions = [parser.OFPActionOutput(router_port)]
+        self.addFlow(datapath, 400, match, actions)
+        
+        # 400: 路由器到设备的IP（包含ICMP，配额许可）
+        match = parser.OFPMatch(
+            eth_src=self.router_mac, 
+            eth_dst=device_mac, 
+            eth_type=0x0800  # IPv4（包含ICMP、TCP、UDP等）
+        )
+        actions = [parser.OFPActionOutput(device_port)]
+        self.addFlow(datapath, 400, match, actions)
+    
+    def _clearQuotaFlows(self, datapath):
+        """清除所有配额相关流表（保留基础流表）"""
+        ofproto = datapath.ofproto
+        parser = datapath.ofproto_parser
+        
+        # 删除优先级400的流表（保留优先级0-1的基础流表）
+        match_any = parser.OFPMatch()
+        mod = parser.OFPFlowMod(
+            datapath=datapath,
+            command=ofproto.OFPFC_DELETE,
+            priority=400,
+            match=match_any,
+            out_port=ofproto.OFPP_ANY,
+            out_group=ofproto.OFPG_ANY
+        )
+        datapath.send_msg(mod)
+        
+        self.logger.info("🧹 清除所有配额相关流表")
+    
+    # ================================================================================
+    # 工具方法
+    # ================================================================================
     
     def addFlow(self, datapath, priority, match, actions, bufferId=None):
         """添加流表项"""
@@ -74,97 +187,6 @@ class FlowManager:
         datapath.send_msg(mod)
         self.logger.info("🗑️  删除流表: 优先级=%d, 匹配=%s", priority, match)
     
-    def updateQuotaBasedFlows(self, datapath, quotaManager):
-        """根据配额状态更新许可流表"""
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        
-        # 获取用户数据
-        user_data = quotaManager.loadUserData()
-        users = user_data.get('users', {})
-        
-        self.logger.info("🔄 根据配额更新许可流表...")
-        
-        # 清除所有现有许可流表（保留默认DROP）
-        self.clearPermitFlows(datapath)
-        
-        # 为每个有配额的设备下发许可流表
-        permit_count = 0
-        for room_number, user_info in users.items():
-            devices = user_info.get('devices', [])
-            quota = user_info.get('quota', 0)
-            used = user_info.get('used_traffic', 0)
-            
-            remaining = quota - used
-            
-            if remaining > 0:
-                for device_mac in devices:
-                    self.addPermitFlowsForDevice(datapath, device_mac)
-                    permit_count += 1
-                    self.logger.info("   ✅ 房间%s设备%s: 剩余%.1fGB", 
-                                   room_number, device_mac, remaining / (1024**3))
-        
-        self.logger.info("📊 许可流表更新完成: %d个设备获得访问权限", permit_count)
-    
-    def addPermitFlowsForDevice(self, datapath, device_mac):
-        """为指定设备添加许可流表 - 使用特定端口"""
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        
-        # 基于Mininet拓扑的端口映射# 假设标准端口分配：h1=2, h2=3, h3=4, router=1
-        
-        
-        # 获取设备对应的端口（基于MAC地址）
-        device_port = self._getDevicePort(device_mac)
-        router_port = 1  # 路由器固定端口 (s1-eth1)
-        
-        # 优先级400: 设备到路由器的双向ICMP（配额许可）
-        match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
-        actions_device_to_router = [parser.OFPActionOutput(router_port)]
-        self.addFlow(datapath, 400, match_device_to_router, actions_device_to_router)
-        
-        # 优先级400: 路由器到设备的双向ICMP（配额许可）
-        match_router_to_device = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac, eth_type=0x0800)
-        actions_router_to_device = [parser.OFPActionOutput(device_port)]
-        self.addFlow(datapath, 400, match_router_to_device, actions_router_to_device)
-
-        # 优先级350: ICMP DROP
-        # 这个规则会被更具体的规则覆盖
-        match_icmp_default = parser.OFPMatch(eth_type=0x0800)
-        actions_icmp_default = []  # 空动作 = DROP
-        self.addFlow(datapath, 350, match_icmp_default, actions_icmp_default)
-        
-        # 优先级300: 设备到路由器的ARP（允许）
-        match_arp_to_router = parser.OFPMatch(eth_type=0x0806, eth_src=device_mac, eth_dst=self.router_mac)
-        actions_arp_to_router = [parser.OFPActionOutput(router_port)]
-        self.addFlow(datapath, 300, match_arp_to_router, actions_arp_to_router)
-        
-        # 优先级300: 路由器到设备的ARP（允许）
-        match_arp_from_router = parser.OFPMatch(eth_type=0x0806, eth_src=self.router_mac, eth_dst=device_mac)
-        actions_arp_from_router = [parser.OFPActionOutput(device_port)]
-        self.addFlow(datapath, 300, match_arp_from_router, actions_arp_from_router)
-        
-        # 优先级200: 所有ARP广播（允许）
-        match_arp_broadcast = parser.OFPMatch(eth_type=0x0806, eth_dst="ff:ff:ff:ff:ff:ff")
-        actions_arp_broadcast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 200, match_arp_broadcast, actions_arp_broadcast)
-        
-        # 优先级150: 所有ARP单播（允许）
-        match_arp_unicast = parser.OFPMatch(eth_type=0x0806)
-        actions_arp_unicast = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 150, match_arp_unicast, actions_arp_unicast)
-        
-        # 优先级100: 设备到设备的流量（DROP）
-        match_device_to_device = parser.OFPMatch(eth_src=device_mac)
-        actions_device_to_device = []  # 空动作 = DROP
-        self.addFlow(datapath, 100, match_device_to_device, actions_device_to_device)
-        
-        # 优先级1: 默认ICMP DROP（最低优先级，仅作为最后手段）
-        # 这个规则会被更具体的规则覆盖
-        match_icmp_default = parser.OFPMatch(eth_type=0x0800)
-        actions_icmp_default = []  # 空动作 = DROP
-        self.addFlow(datapath, 1, match_icmp_default, actions_icmp_default)
-    
     def _getDevicePort(self, device_mac):
         """根据MAC地址返回对应的端口"""
         port_mapping = {
@@ -175,42 +197,19 @@ class FlowManager:
         }
         return port_mapping.get(device_mac, ofproto_v1_3.OFPP_FLOOD)
     
-    def removePermitFlowsForDevice(self, datapath, device_mac):
-        """移除指定设备的ICMP许可流表 - 仅移除ICMP相关规则"""
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        
-        device_port = self._getDevicePort(device_mac)
-        router_port = 1
-        
-        # 仅删除ICMP相关的Priority 400规则
-        match_device_to_router = parser.OFPMatch(eth_src=device_mac, eth_dst=self.router_mac, eth_type=0x0800)
-        self.deleteFlow(datapath, 400, match_device_to_router)
-        
-        match_router_to_device = parser.OFPMatch(eth_src=self.router_mac, eth_dst=device_mac, eth_type=0x0800)
-        self.deleteFlow(datapath, 400, match_router_to_device)
-        
-        self.logger.info("🚫 移除设备%s的ICMP许可流表（保留ARP）", device_mac)
+    # ================================================================================
+    # 兼容旧接口（已废弃）
+    # ================================================================================
+    
+    def installDefaultDropFlows(self, datapath):
+        """兼容旧接口 - 使用新的installDefaultFlows"""
+        self.logger.warning("⚠️  installDefaultDropFlows已废弃，使用installDefaultFlows")
+        self.installDefaultFlows(datapath)
     
     def clearPermitFlows(self, datapath):
-        """清除所有许可流表（保留默认DROP）"""
-        ofproto = datapath.ofproto
-        parser = datapath.ofproto_parser
-        
-        # 删除优先级50-400的流表（保留默认DROP）
-        for priority in [50, 100, 150, 200, 300, 400]:
-            match_any = parser.OFPMatch()
-            mod = parser.OFPFlowMod(
-                datapath=datapath,
-                command=ofproto.OFPFC_DELETE,
-                priority=priority,
-                match=match_any,
-                out_port=ofproto.OFPP_ANY,
-                out_group=ofproto.OFPG_ANY
-            )
-            datapath.send_msg(mod)
-        
-        self.logger.info("🧹 清除所有许可流表")
+        """兼容旧接口 - 使用新的_clearQuotaFlows"""
+        self.logger.warning("⚠️  clearPermitFlows已废弃，使用_clearQuotaFlows")
+        self._clearQuotaFlows(datapath)
     
     def handlePacket(self, datapath, srcMac, dstMac, inPort, msg):
         """处理数据包转发（备用，主要逻辑在updateQuotaBasedFlows）"""
