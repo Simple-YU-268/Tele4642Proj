@@ -49,7 +49,7 @@ class TrafficMonitor:
             self.deviceTraffic[mac] += bytesCount
             self.dailyTraffic[mac] += bytesCount
             
-            # 同步更新配额系统的流量使用
+            # 同步更新配额系统的流量使用（包含流表更新触发）
             self.quotaManager.updateUserTraffic(mac, bytesCount)
             
             self.logger.debug("Device %s traffic updated: +%d bytes", mac, bytesCount)

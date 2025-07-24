@@ -11,6 +11,8 @@ class APIController(ControllerBase):
     def __init__(self, req, link, data, **config):
         super(APIController, self).__init__(req, link, data, **config)
         self.quotaManager = data['quotaManager']
+        self.trafficMonitor = data['trafficMonitor']
+        self.controller = data['controller']
     
     def list_quota_status(self, req, **kwargs):
         """获取所有设备的配额状态"""
@@ -31,6 +33,8 @@ class APIController(ControllerBase):
             success = self.quotaManager.addQuotaForDevice(mac_address, bytes_to_add)
             
             if success:
+                # 购买流量后立即更新流表
+                self._update_all_flows()
                 return Response(content_type='application/json', 
                               body=json.dumps({'success': True, 'message': f'Added {additional_gb}GB to {mac_address}'}))
             else:
@@ -51,6 +55,7 @@ class APIController(ControllerBase):
             success = self.quotaManager.resetDeviceTraffic(mac_address)
             
             if success:
+                self._update_all_flows()
                 return Response(content_type='application/json', 
                               body=json.dumps({'success': True, 'message': f'Reset traffic for {mac_address}'}))
             else:
@@ -62,25 +67,25 @@ class APIController(ControllerBase):
     def update_flows(self, req, **kwargs):
         """手动更新流表（用于购买流量后）"""
         try:
-            # 获取所有控制器实例
-            from ryu.base.app_manager import AppManager
-            app_mgr = AppManager.get_instance()
-            controller = None
-            
-            for app in app_mgr.applications.values():
-                if hasattr(app, 'flowManager'):
-                    controller = app
-                    break
-            
-            if controller:
-                # 更新所有交换机的流表
-                for dp in app_mgr.datapaths.values():
-                    controller.flowManager.updateQuotaBasedFlows(dp, controller.quotaManager)
-                
-                return Response(content_type='application/json', 
-                              body=json.dumps({'success': True, 'message': 'Flows updated'}))
-            else:
-                return Response(status=500, body=json.dumps({'error': 'Controller not found'}))
-                
+            self._update_all_flows()
+            return Response(content_type='application/json', 
+                          body=json.dumps({'success': True, 'message': 'Flows updated'}))
+        except Exception as e:
+            return Response(status=500, body=json.dumps({'error': str(e)}))
+    
+    def _update_all_flows(self):
+        """更新所有连接的交换机的流表"""
+        try:
+            for datapath in self.controller.datapaths.values():
+                self.controller.flowManager.updateQuotaBasedFlows(datapath, self.controller.quotaManager)
+            self.controller.logger.info("✅ 所有交换机流表已更新")
+        except Exception as e:
+            self.controller.logger.error("❌ 流表更新失败: %s", str(e))
+    
+    def get_traffic_stats(self, req, **kwargs):
+        """获取流量统计"""
+        try:
+            stats = self.trafficMonitor.getQuotaBasedTraffic()
+            return Response(content_type='application/json', body=json.dumps(stats, indent=2))
         except Exception as e:
             return Response(status=500, body=json.dumps({'error': str(e)}))

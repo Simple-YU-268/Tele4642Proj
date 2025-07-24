@@ -36,8 +36,12 @@ class HotelWifiController(app_manager.RyuApp):
         wsgi = kwargs['wsgi']
         wsgi.register(APIController, {
             'quotaManager': self.quotaManager,
-            'trafficMonitor': self.trafficMonitor
+            'trafficMonitor': self.trafficMonitor,
+            'controller': self
         })
+        
+        # 存储当前连接的交换机
+        self.datapaths = {}
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switchFeaturesHandler(self, ev):
