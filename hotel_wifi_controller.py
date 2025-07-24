@@ -50,15 +50,15 @@ class HotelWifiController(app_manager.RyuApp):
         self.logger.info("📍 交换机ID: %016x", datapath.id)
         
         # 默认DROP所有流量
-        self.flowManager.installDefaultDropFlows(datapath)
+        #self.flowManager.installDefaultDropFlows(datapath)
 
 
-        # 安装基础流表
+        # 安装基础流表 - table-miss + ARP
         self.flowManager.installDefaultFlows(datapath)
         self.logger.info("🔧 安装基础流表 - table-miss + ARP")
-        self.flowManager._installTableMissFlow(datapath)
-        self.flowManager._installArpFlows(datapath)
-        self.logger.info("✅ 基础流表安装完成 - 默认DROP，通用ARP许可")
+        #self.flowManager._installTableMissFlow(datapath)
+        #self.flowManager._installArpFlows(datapath)
+        #self.logger.info("✅ 基础流表安装完成 - 默认DROP，通用ARP许可")
         
         # 根据配额下发许可流表
         self.flowManager.updateQuotaBasedFlows(datapath, self.quotaManager)
