@@ -21,10 +21,10 @@ def hotel_wifi_topology():
     router = net.addHost('router', ip='10.0.0.254/24', mac='00:00:00:00:00:AA')
     
     # 连接所有节点
-    net.addLink(h1, s1)
-    net.addLink(h2, s1)
-    net.addLink(h3, s1)
-    net.addLink(router, s1)
+    net.addLink(h1, s1, port1=0, port2=2)
+    net.addLink(h2, s1, port1=0, port2=3)
+    net.addLink(h3, s1, port1=0, port2=4)
+    net.addLink(router, s1, port1=0, port2=1)
 
     # 启动网络
     net.start()

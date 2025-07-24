@@ -108,23 +108,23 @@ class FlowManager:
         self.addFlow(datapath, 10, match_anyarp, actions_anyarp)
 
         # 400: 设备到路由器的IP（包含ICMP，配额许可）
-        match = parser.OFPMatch(
+        match_h_r = parser.OFPMatch(
             eth_src=device_mac, 
             eth_dst=self.router_mac, 
             eth_type=0x0800  # IPv4（包含ICMP、TCP、UDP等）
         )
-        actions = [parser.OFPActionOutput(router_port)]
-        self.addFlow(datapath, 400, match, actions)
-        
+        actions_h_r = [parser.OFPActionOutput(router_port)]
+        self.addFlow(datapath, 400, match_h_r, actions_h_r)
+
         # 400: 路由器到设备的IP（包含ICMP，配额许可）
-        match = parser.OFPMatch(
-            eth_src=self.router_mac, 
-            eth_dst=device_mac, 
+        match_r_h = parser.OFPMatch(
+            eth_src=self.router_mac,
+            eth_dst=device_mac,
             eth_type=0x0800  # IPv4（包含ICMP、TCP、UDP等）
         )
-        actions = [parser.OFPActionOutput(device_port)]
-        self.addFlow(datapath, 400, match, actions)
-    
+        actions_r_h = [parser.OFPActionOutput(device_port)]
+        self.addFlow(datapath, 400, match_r_h, actions_r_h)
+        self.logger.info("🔄 安装设备许可流表: 设备=%s, 端口=%d", device_mac, device_port)
     def _clearQuotaFlows(self, datapath):
         """清除所有配额相关流表（保留基础流表）"""
         ofproto = datapath.ofproto
