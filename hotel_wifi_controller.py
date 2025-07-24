@@ -11,6 +11,7 @@ from ryu.controller.handler import set_ev_cls
 from ryu.ofproto import ofproto_v1_3
 from ryu.app.wsgi import WSGIApplication
 from ryu.lib.packet import packet, ethernet, ipv4, arp
+from ryu.lib import hub
 
 from modules.flow_manager import FlowManager
 from modules.quota_manager import QuotaManager
@@ -42,6 +43,10 @@ class HotelWifiController(app_manager.RyuApp):
         
         # 存储当前连接的交换机
         self.datapaths = {}
+        
+        # 启动周期性配额更新任务
+        self.logger.info("🔄 启动周期性配额更新任务...")
+        self.threads.append(hub.spawn(self._periodic_quota_update))
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switchFeaturesHandler(self, ev):
@@ -69,6 +74,9 @@ class HotelWifiController(app_manager.RyuApp):
         
         self.logger.info("✅ 初始化完成 - 默认DROP，配额许可")
         self.logger.info("=" * 60)
+        
+        # 记录交换机连接
+        self.datapaths[datapath.id] = datapath
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packetInHandler(self, ev):
@@ -120,3 +128,48 @@ class HotelWifiController(app_manager.RyuApp):
         
         self.logger.info("🎯 流量已记录 - 由预配置流表控制")
         self.logger.info("=" * 80)
+
+    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
+    def portStatusHandler(self, ev):
+        """处理交换机端口状态变化"""
+        msg = ev.msg
+        datapath = msg.datapath
+        port_no = msg.desc.port_no
+        reason = msg.reason
+        
+        if reason == 0:  # OFPPR_ADD
+            self.logger.info("🔌 端口 %d 已添加到交换机 %016x", port_no, datapath.id)
+        elif reason == 1:  # OFPPR_DELETE
+            self.logger.info("🔌 端口 %d 已从交换机 %016x 删除", port_no, datapath.id)
+            if datapath.id in self.datapaths:
+                del self.datapaths[datapath.id]
+                self.logger.info("📍 交换机 %016x 已从datapaths中移除", datapath.id)
+        elif reason == 2:  # OFPPR_MODIFY
+            self.logger.info("🔌 端口 %d 在交换机 %016x 上已修改", port_no, datapath.id)
+
+       
+
+    def _periodic_quota_update(self):
+        """每5秒执行一次配额更新任务"""
+        while True:
+            hub.sleep(5)  # 每5秒执行一次
+            
+            if not self.datapaths:
+                continue
+                
+            self.logger.info("=" * 60)
+            self.logger.info("🔄 周期性配额更新任务开始")
+            self.logger.info("=" * 60)
+            
+            # 为每个连接的交换机更新配额流表
+            for dpid, datapath in self.datapaths.items():
+                try:
+                    self.logger.info("📍 更新交换机 %016x 的配额流表", dpid)
+                    self.flowManager.updateQuotaBasedFlows(datapath, self.quotaManager)
+                    self.logger.info("✅ 交换机 %016x 配额流表更新完成", dpid)
+                except Exception as e:
+                    self.logger.error("❌ 更新交换机 %016x 配额流表失败: %s", dpid, str(e))
+            
+            self.logger.info("=" * 60)
+            self.logger.info("✅ 周期性配额更新任务完成")
+            self.logger.info("=" * 60)
