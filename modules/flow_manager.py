@@ -47,7 +47,7 @@ class FlowManager:
         
         # (1) Allow all ARP traffic - 通用ARP许可
         match = parser.OFPMatch(eth_type=0x0806)
-        actions = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
+        actions = [parser.OFPActionOutput(ofproto.OFPP_ALL)]
         
         self.logger.info("✅ 安装ARP通用许可流表: 交换机=%016x", datapath.id)
         self.addFlow(datapath, 1, match, actions)

@@ -34,11 +34,16 @@ def hotel_wifi_topology():
     h2.cmd('route add default gw 10.0.0.254')
     h3.cmd('route add default gw 10.0.0.254')
     
-    # 配置路由器路由（仅启用IP转发，无NAT - 封闭系统）
+    # 配置路由器接口和ARP
+    router.cmd('ifconfig router-eth0 10.0.0.254/24 hw ether 00:00:00:00:00:AA up')
     router.cmd('echo 1 > /proc/sys/net/ipv4/ip_forward')
-    router.cmd('ifconfig router-eth0 10.0.0.254/24')
+    router.cmd('echo 0 > /proc/sys/net/ipv4/conf/all/arp_ignore')
+    router.cmd('echo 0 > /proc/sys/net/ipv4/conf/all/arp_announce')
     
-    # 配置DNS服务器（可选，用于内部测试）
+    # 确保ARP缓存清理
+    router.cmd('ip neigh flush all')
+    
+    # 配置DNS服务器
     h1.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
     h2.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
     h3.cmd('echo "nameserver 8.8.8.8" > /etc/resolv.conf')
