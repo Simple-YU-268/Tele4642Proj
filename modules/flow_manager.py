@@ -47,16 +47,12 @@ class FlowManager:
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         
-
-
-   
-      
-        # (1) Allow all ARP traffic - 通用ARP许可
+        # (10) Allow all ARP traffic - 通用ARP许可（提高优先级确保生效）
         match = parser.OFPMatch(eth_type=0x0806)
         actions = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
         
         self.logger.info("✅ 安装ARP通用许可流表: 交换机=%016x", datapath.id)
-        self.addFlow(datapath, 1, match, actions)
+        self.addFlow(datapath, 10, match, actions)
     
     # ================================================================================
     # 配额相关流表管理
@@ -101,31 +97,27 @@ class FlowManager:
         
         # 优先级层次（从高到低）：
         # 400: 设备-路由器双向IP（包含ICMP，配额许可）
-        # 1:   ARP（基础流表已处理）
+        # 10:  通用ARP许可（确保ARP正常工作）
         # 0:   table-miss drop（基础流表已处理）
-        # 10:  通用ARP许可（基础流表已处理）
-        match_anyarp = parser.OFPMatch(eth_type=0x0806)
-        actions_anyarp = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 10, match_anyarp, actions_anyarp)
-
+        
         # 400: 设备到路由器的IP（包含ICMP，配额许可）
-        match = parser.OFPMatch(
+        match_h_r = parser.OFPMatch(
             eth_src=device_mac, 
             eth_dst=self.router_mac, 
             eth_type=0x0800  # IPv4（包含ICMP、TCP、UDP等）
         )
-        actions = [parser.OFPActionOutput(router_port)]
-        self.addFlow(datapath, 400, match, actions)
+        actions_h_r = [parser.OFPActionOutput(router_port)]
+        self.addFlow(datapath, 400, match_h_r, actions_h_r)
         
         # 400: 路由器到设备的IP（包含ICMP，配额许可）
-        match = parser.OFPMatch(
-            eth_src=self.router_mac, 
-            eth_dst=device_mac, 
+        match_r_h = parser.OFPMatch(
+            eth_src=self.router_mac,
+            eth_dst=device_mac,
             eth_type=0x0800  # IPv4（包含ICMP、TCP、UDP等）
         )
-        actions = [parser.OFPActionOutput(device_port)]
-        self.addFlow(datapath, 400, match, actions)
-    
+        actions_r_h = [parser.OFPActionOutput(device_port)]
+        self.addFlow(datapath, 400, match_r_h, actions_r_h)
+
     def _clearQuotaFlows(self, datapath):
         """清除所有配额相关流表（保留基础流表）"""
         ofproto = datapath.ofproto
