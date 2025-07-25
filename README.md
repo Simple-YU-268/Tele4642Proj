@@ -238,6 +238,10 @@ ovs-ofctl dump-flows s1
 
 # 重置系统
 sudo mn -c && ryu-manager hotel_wifi_controller.py
+
+#流量消耗
+mininet> router iperf -s 
+mininet> h1 iperf -c router -b 100M -t 60
 ```
 
 ## 🎯 使用场景
