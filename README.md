@@ -104,7 +104,15 @@ sudo apt-get install mininet
 
 #### **1. 启动SDN控制器**
 ```bash
-ryu-manager hotel_wifi_controller.py
+# Windows环境
+cd c:/Users/yxp02/Tele4642Proj
+set PYTHONPATH=%cd% && python -m ryu.cmd.manager hotel_wifi_controller.py
+# 或
+python -m ryu.cmd.manager hotel_wifi_controller.py
+
+# Linux环境
+export PYTHONPATH=$PWD && ryu-manager hotel_wifi_controller.py
+
 # 控制器监听: 0.0.0.0:6633 (OpenFlow)
 # API接口: 0.0.0.0:8080
 ```

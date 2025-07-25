@@ -277,15 +277,19 @@ ryu --version     # >= 4.34
 ```
 
 #### 2. 启动顺序
+
+
+
+##### **Linux环境**
 ```bash
 # 终端1: 启动SDN控制器
-ryu-manager hotel_wifi_controller.py
+export PYTHONPATH=$PWD && ryu-manager hotel_wifi_controller.py
 
 # 终端2: 启动认证服务器
-python flask_room_auth.py
+python3 flask_room_auth.py
 
 # 终端3: 启动网络拓扑
-sudo python mininettopo.py
+sudo python3 mininettopo.py
 ```
 
 #### 3. 验证部署
@@ -387,7 +391,9 @@ curl http://localhost:5000/health
 # 查看实时流量
 watch -n 1 'curl -s http://localhost:8080/traffic'
 ```
-
+# 流量测试
+mininet> router iperf -s &
+mininet> h1 iperf -c router -b 100M -t 60
 ---
 
 ## 🛠️ 扩展开发
@@ -519,7 +525,7 @@ done
 
 ---
 
-**Wiki版本**: v2.1  
-**最后更新**: 2025-07-24  
+**Wiki版本**: v2.2  
+**最后更新**: 2025-07-25  
 **维护者**: Simple-YU-268  
 **许可证**: MIT
