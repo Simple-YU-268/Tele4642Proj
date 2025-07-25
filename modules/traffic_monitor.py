@@ -1,4 +1,4 @@
-"""流量监控模块 - 基于配额的流量统计"""
+"""流量监控模块 - 基于配额的流量统计，仅使用user_data.json"""
 
 import json
 import os
@@ -8,79 +8,87 @@ from collections import defaultdict
 
 
 class TrafficMonitor:
-    """设备流量监控器 - 与配额系统集成"""
+    """设备流量监控器 - 与配额系统集成，流量数据存储在user_data.json中"""
     
     def __init__(self, logger, quota_manager):
         self.logger = logger
         self.quotaManager = quota_manager
-        self.deviceTraffic = defaultdict(int)
-        self.dailyTraffic = defaultdict(int)
+        self.userDataFile = 'user_data.json'
         self.lock = Lock()
-        self.statsFile = 'traffic_stats.json'
-        self.loadTrafficStats()
     
-    def loadTrafficStats(self):
-        """从文件加载流量统计"""
+    def loadUserData(self):
+        """加载用户数据"""
         try:
-            if os.path.exists(self.statsFile):
-                with open(self.statsFile, 'r') as f:
-                    data = json.load(f)
-                    self.deviceTraffic = defaultdict(int, data.get('total', {}))
-                    self.dailyTraffic = defaultdict(int, data.get('daily', {}))
+            if os.path.exists(self.userDataFile):
+                with open(self.userDataFile, 'r') as f:
+                    return json.load(f)
+            return {"users": {}, "sessions": {}}
         except Exception as e:
-            self.logger.error("Error loading traffic stats: %s", str(e))
+            self.logger.error("Error loading user data: %s", str(e))
+            return {"users": {}, "sessions": {}}
     
-    def saveTrafficStats(self):
-        """保存流量统计到文件"""
+    def saveUserData(self, data):
+        """保存用户数据"""
         try:
             with self.lock:
-                with open(self.statsFile, 'w') as f:
-                    json.dump({
-                        'total': dict(self.deviceTraffic),
-                        'daily': dict(self.dailyTraffic),
-                        'lastUpdate': time.time()
-                    }, f, indent=2)
+                with open(self.userDataFile, 'w') as f:
+                    json.dump(data, f, indent=2)
         except Exception as e:
-            self.logger.error("Error saving traffic stats: %s", str(e))
+            self.logger.error("Error saving user data: %s", str(e))
     
     def updateTraffic(self, mac, bytesCount):
         """更新设备流量统计并同步到配额系统"""
-        with self.lock:
-            self.deviceTraffic[mac] += bytesCount
-            self.dailyTraffic[mac] += bytesCount
-            
-            # 同步更新配额系统的流量使用（包含流表更新触发）
-            self.quotaManager.updateUserTraffic(mac, bytesCount)
-            
-            self.logger.debug("Device %s traffic updated: +%d bytes", mac, bytesCount)
-            self.saveTrafficStats()
+        user_data = self.loadUserData()
+        
+        # 更新配额系统的流量使用
+        self.quotaManager.updateUserTraffic(mac, bytesCount)
+        
+        self.logger.debug("Device %s traffic updated: +%d bytes", mac, bytesCount)
     
     def getTraffic(self, mac=None):
         """获取设备流量统计"""
-        with self.lock:
-            if mac:
-                return {
-                    'total': self.deviceTraffic.get(mac, 0),
-                    'daily': self.dailyTraffic.get(mac, 0)
-                }
-            return {
-                'total': dict(self.deviceTraffic),
-                'daily': dict(self.dailyTraffic)
-            }
+        user_data = self.loadUserData()
+        traffic_data = {}
+        
+        for room_number, user_info in user_data.get('users', {}).items():
+            devices = user_info.get('devices', [])
+            used_traffic = user_info.get('used_traffic', 0)
+            
+            for device_mac in devices:
+                if mac is None or mac == device_mac:
+                    traffic_data[device_mac] = {
+                        'total': used_traffic,
+                        'daily': used_traffic,  # 简化为总流量
+                        'room': room_number
+                    }
+        
+        return traffic_data if mac is None else traffic_data.get(mac, {})
     
     def resetDailyTraffic(self):
-        """重置每日流量统计"""
-        with self.lock:
-            self.dailyTraffic.clear()
-            self.saveTrafficStats()
-            self.logger.info("Daily traffic statistics reset")
+        """重置每日流量统计 - 现在重置所有流量使用"""
+        user_data = self.loadUserData()
+        
+        for room_number, user_info in user_data.get('users', {}).items():
+            user_info['used_traffic'] = 0
+        
+        self.saveUserData(user_data)
+        self.logger.info("All traffic usage reset")
     
     def getTopUsers(self, limit=10):
         """获取流量使用最多的用户"""
-        with self.lock:
-            sortedUsers = sorted(self.deviceTraffic.items(), 
-                               key=lambda x: x[1], reverse=True)[:limit]
-            return sortedUsers
+        user_data = self.loadUserData()
+        users = []
+        
+        for room_number, user_info in user_data.get('users', {}).items():
+            devices = user_info.get('devices', [])
+            used_traffic = user_info.get('used_traffic', 0)
+            
+            for device_mac in devices:
+                users.append((device_mac, used_traffic, room_number))
+        
+        # 按流量使用量排序
+        users.sort(key=lambda x: x[1], reverse=True)
+        return users[:limit]
     
     def getQuotaBasedTraffic(self):
         """获取基于配额的流量统计"""
@@ -90,8 +98,8 @@ class TrafficMonitor:
         for mac, quota_info in quota_status.items():
             traffic_data[mac] = {
                 'traffic': {
-                    'total': self.deviceTraffic.get(mac, 0),
-                    'daily': self.dailyTraffic.get(mac, 0)
+                    'total': quota_info.get('used', 0),
+                    'daily': quota_info.get('used', 0)  # 简化为总流量
                 },
                 'quota': quota_info
             }
