@@ -129,47 +129,51 @@ class HotelWifiController(app_manager.RyuApp):
         self.logger.info("🎯 流量已记录 - 由预配置流表控制")
         self.logger.info("=" * 80)
 
-    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
-    def portStatusHandler(self, ev):
-        """处理交换机端口状态变化"""
+    @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
+    def packetInHandler(self, ev):
+        """数据包处理 - 仅记录流量，不处理转发（由预配置流表控制）"""
         msg = ev.msg
         datapath = msg.datapath
-        port_no = msg.desc.port_no
-        reason = msg.reason
         
-        if reason == 0:  # OFPPR_ADD
-            self.logger.info("🔌 端口 %d 已添加到交换机 %016x", port_no, datapath.id)
-        elif reason == 1:  # OFPPR_DELETE
-            self.logger.info("🔌 端口 %d 已从交换机 %016x 删除", port_no, datapath.id)
-            if datapath.id in self.datapaths:
-                del self.datapaths[datapath.id]
-                self.logger.info("📍 交换机 %016x 已从datapaths中移除", datapath.id)
-        elif reason == 2:  # OFPPR_MODIFY
-            self.logger.info("🔌 端口 %d 在交换机 %016x 上已修改", port_no, datapath.id)
-
-       
-
-    def _periodic_quota_update(self):
-        """每5秒执行一次配额更新任务"""
-        while True:
-            hub.sleep(5)  # 每5秒执行一次
-            
-            if not self.datapaths:
-                continue
-                
-            self.logger.info("=" * 60)
-            self.logger.info("🔄 周期性配额更新任务开始")
-            self.logger.info("=" * 60)
-            
-            # 为每个连接的交换机更新配额流表
-            for dpid, datapath in self.datapaths.items():
-                try:
-                    self.logger.info("📍 更新交换机 %016x 的配额流表", dpid)
-                    self.flowManager.updateQuotaBasedFlows(datapath, self.quotaManager)
-                    self.logger.info("✅ 交换机 %016x 配额流表更新完成", dpid)
-                except Exception as e:
-                    self.logger.error("❌ 更新交换机 %016x 配额流表失败: %s", dpid, str(e))
-            
-            self.logger.info("=" * 60)
-            self.logger.info("✅ 周期性配额更新任务完成")
-            self.logger.info("=" * 60)
+        # 解析数据包
+        pkt = packet.Packet(msg.data)
+        eth = pkt.get_protocols(ethernet.ethernet)[0]
+        
+        srcMac = eth.src
+        dstMac = eth.dst
+        inPort = msg.match['in_port']
+        packet_len = len(msg.data)
+        # 更新流量统计
+        self.trafficMonitor.updateTraffic(srcMac, packet_len)
+        # 仅记录数据包信息，不处理转发（由预配置流表控制）
+        packet_type = "UNKNOWN"
+        
+        if eth.ethertype == 0x0806:
+            packet_type = "ARP"
+        elif eth.ethertype == 0x0800:
+            packet_type = "IPv4"
+        elif eth.ethertype == 0x86DD:
+            packet_type = "IPv6"
+        else:
+            packet_type = f"OTHER(0x{eth.ethertype:04x})"
+        
+        # 记录数据包信息（不处理转发）
+        self.logger.info("=" * 80)
+        self.logger.info("📊 PACKET-IN 监控记录:")
+        self.logger.info("   📍 交换机: %016x", datapath.id)
+        self.logger.info("   🔗 源MAC: %s", srcMac)
+        self.logger.info("   🔗 目的MAC: %s", dstMac)
+        self.logger.info("   🔌 入端口: %d", inPort)
+        self.logger.info("   📏 包长度: %d字节", packet_len)
+        self.logger.info("   🏷️  类型: %s", packet_type)
+        
+        # 如果是IPv4，显示IP信息
+        if eth.ethertype == 0x0800:
+            ip_pkt = pkt.get_protocol(ipv4.ipv4)
+            if ip_pkt:
+                self.logger.info("   🌐 源IP: %s", ip_pkt.src)
+                self.logger.info("   🌐 目的IP: %s", ip_pkt.dst)
+                self.logger.info("   🔧 协议: %s", ip_pkt.proto)
+        
+        self.logger.info("🎯 流量已记录 - 由预配置流表控制")
+        self.logger.info("=" * 80)
