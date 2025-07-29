@@ -129,24 +129,6 @@ class HotelWifiController(app_manager.RyuApp):
         self.logger.info("🎯 流量已记录 - 由预配置流表控制")
         self.logger.info("=" * 80)
 
-    @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
-    def portStatusHandler(self, ev):
-        """处理交换机端口状态变化"""
-        msg = ev.msg
-        datapath = msg.datapath
-        port_no = msg.desc.port_no
-        reason = msg.reason
-        
-        if reason == 0:  # OFPPR_ADD
-            self.logger.info("🔌 端口 %d 已添加到交换机 %016x", port_no, datapath.id)
-        elif reason == 1:  # OFPPR_DELETE
-            self.logger.info("🔌 端口 %d 已从交换机 %016x 删除", port_no, datapath.id)
-            if datapath.id in self.datapaths:
-                del self.datapaths[datapath.id]
-                self.logger.info("📍 交换机 %016x 已从datapaths中移除", datapath.id)
-        elif reason == 2:  # OFPPR_MODIFY
-            self.logger.info("🔌 端口 %d 在交换机 %016x 上已修改", port_no, datapath.id)
-
        
 
     def _periodic_quota_update(self):
@@ -173,3 +155,5 @@ class HotelWifiController(app_manager.RyuApp):
             self.logger.info("=" * 60)
             self.logger.info("✅ 周期性配额更新任务完成")
             self.logger.info("=" * 60)
+            # 启动周期性任务
+
