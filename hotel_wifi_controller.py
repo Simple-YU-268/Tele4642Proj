@@ -57,31 +57,12 @@ class HotelWifiController(app_manager.RyuApp):
         """交换机连接初始化 - 默认DROP所有流量"""
         datapath = ev.msg.datapath
         
-            self.logger.info("=" * 60)
-            self.logger.info("✅ 周期性流量监控任务完成")
-            self.logger.info("=" * 60)
-
-    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
-    def flowStatsReplyHandler(self, ev):
-        """处理flow stats响应事件"""
-        self.trafficMonitor.processFlowStatsReply(ev)
-
-    @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
-    def portStatsReplyHandler(self, ev):
-        """处理port stats响应事件"""
-        self.trafficMonitor.processPortStatsReply(ev)
-        self.logger.info("📍 交换机ID: %016x", datapath.id)
+        self.logger.info("=" * 60)
+        self.logger.info("📍 交换机连接初始化: %016x", datapath.id)
         
-        # 默认DROP所有流量
-        #self.flowManager.installDefaultDropFlows(datapath)
-
-
         # 安装基础流表 - table-miss + ARP
         self.flowManager.installDefaultFlows(datapath)
         self.logger.info("🔧 安装基础流表 - table-miss + ARP")
-        #self.flowManager._installTableMissFlow(datapath)
-        #self.flowManager._installArpFlows(datapath)
-        #self.logger.info("✅ 基础流表安装完成 - 默认DROP，通用ARP许可")
         
         # 根据配额下发许可流表
         self.flowManager.updateQuotaBasedFlows(datapath, self.quotaManager)
@@ -106,9 +87,6 @@ class HotelWifiController(app_manager.RyuApp):
         dstMac = eth.dst
         inPort = msg.match['in_port']
         packet_len = len(msg.data)
-        
-        # 更新流量统计
-        self.trafficMonitor.updateTraffic(srcMac, packet_len)
         
         # 仅记录数据包信息，不处理转发（由预配置流表控制）
         packet_type = "UNKNOWN"
@@ -143,7 +121,15 @@ class HotelWifiController(app_manager.RyuApp):
         self.logger.info("🎯 流量已记录 - 由预配置流表控制")
         self.logger.info("=" * 80)
 
-       
+    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
+    def flowStatsReplyHandler(self, ev):
+        """处理flow stats响应事件"""
+        self.trafficMonitor.processFlowStatsReply(ev)
+
+    @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
+    def portStatsReplyHandler(self, ev):
+        """处理port stats响应事件"""
+        self.trafficMonitor.processPortStatsReply(ev)
 
     def _periodic_quota_update(self):
         """每5秒执行一次配额更新任务"""
@@ -177,10 +163,34 @@ class HotelWifiController(app_manager.RyuApp):
             
             if not self.datapaths:
                 continue
-            
-
-
-            accumulateFlowStats(self, datapath, mac_address)    
+                
             self.logger.info("=" * 60)
             self.logger.info("📊 周期性流量监控任务开始")
+            self.logger.info("=" * 60)
+            
+            # 为每个连接的交换机收集流量统计
+            for dpid, datapath in self.datapaths.items():
+                try:
+                    self.logger.info("📍 收集交换机 %016x 的流量统计", dpid)
+                    
+                    # 获取当前连接的设备MAC地址列表
+                    user_data = self.trafficMonitor.loadUserData()
+                    connected_macs = []
+                    for room_number, user_info in user_data.get('users', {}).items():
+                        devices = user_info.get('devices', [])
+                        for device_mac in devices:
+                            if device_mac in self.trafficMonitor.lastTimeUsed:
+                                connected_macs.append(device_mac)
+                    
+                    # 为每个设备收集流量统计
+                    for mac_address in connected_macs:
+                        self.logger.debug("🔍 收集设备 %s 的流量统计", mac_address)
+                        self.trafficMonitor.accumulateFlowStats(datapath, mac_address)
+                    
+                    self.logger.info("✅ 交换机 %016x 流量统计收集完成", dpid)
+                except Exception as e:
+                    self.logger.error("❌ 收集交换机 %016x 流量统计失败: %s", dpid, str(e))
+            
+            self.logger.info("=" * 60)
+            self.logger.info("✅ 周期性流量监控任务完成")
             self.logger.info("=" * 60)
