@@ -152,7 +152,7 @@
     </div>
 
     <script>
-        const DEBUG_MODE = true;   // 调试开关(true跳过验证，false需要验证才能进入下一页)
+        const DEBUG_MODE = false;   // 调试开关(true跳过验证，false需要验证才能进入下一页)
 
 
         let selectedPlan = '';
@@ -193,12 +193,12 @@
             e.target.value = e.target.value.replace(/\D/g, '').replace(/(\d{2})(\d{0,2})/, '$1/$2');
         });
 
-        document.getElementById('mac').addEventListener('input', e => {
-            let value = e.target.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
-            if (value.length > 12) value = value.substring(0, 12);
-            const parts = value.match(/.{1,2}/g) || [];
-            e.target.value = parts.join(':');
-        });
+        //document.getElementById('mac').addEventListener('input', e => {
+        //    let value = e.target.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+        //    if (value.length > 12) value = value.substring(0, 12);
+        //    const parts = value.match(/.{1,2}/g) || [];
+        //    e.target.value = parts.join(':');
+        //});
 
         document.getElementById('room-number').addEventListener('input', e => {
             e.target.value = e.target.value.replace(/[^0-9]/g, '');
@@ -273,17 +273,7 @@
         }
 
         async function processPayment() {
-            
-            
-             // ====== 调试模式直接跳过后端验证 ======
-            if (DEBUG_MODE) {
-             document.getElementById('new-quota').textContent = '50 GB';
-             showStep('device-step');
-             return;
-             }
-             // =================================
 
-        
             const card = document.getElementById('card').value.replace(/\s/g, '');
             const expiry = document.getElementById('expiry').value;
             const cvv = document.getElementById('cvv').value;
@@ -314,7 +304,7 @@
                 
                 const planData = await planRes.json();
                 document.getElementById('new-quota').textContent = formatBytes(planData.quota);
-                showStep('device-step');
+                connectDevice();
             } else {
                 alert('Payment failed');
             }
@@ -347,7 +337,6 @@
 
              if (data.status === 'success') {
                  document.getElementById('final-quota').textContent = formatBytes(data.quota);
-                 document.getElementById('success-step').innerHTML += `<p>Connected MAC: ${mac}</p>`;
                  showStep('success-step');
             } else {
               alert('Failed to connect device');
