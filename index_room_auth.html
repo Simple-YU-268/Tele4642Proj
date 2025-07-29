@@ -159,6 +159,22 @@
         let currentRoom = '';
         const API = 'http://127.0.0.1:5000';
 
+        const roomMacMap = {
+         '101': '00:00:00:00:00:01',
+         '102': '00:00:00:00:00:02',
+         '103': '00:00:00:00:00:03',
+         '201': '00:00:00:00:00:11',
+         '202': '00:00:00:00:00:12',
+         '203': '00:00:00:00:00:13',
+         '301': '00:00:00:00:00:21',
+         '302': '00:00:00:00:00:22',
+         '303': '00:00:00:00:00:23'
+         };
+
+
+
+
+
         function showStep(step) {
             document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
             document.getElementById(step).classList.add('active');
@@ -250,7 +266,7 @@
 
         async function confirmPlan() {
             if (selectedPlan === '0GB') {
-                showStep('device-step');
+                connectDevice();   // 直接连接
             } else {
                 showStep('payment-step');
             }
@@ -315,28 +331,50 @@
              }
              // =================================
 
+            
+             const mac = roomMacMap[currentRoom] || '00:00:00:00:00:FF';
 
+             const res = await fetch(`${API}/connect_room_device`, {
+                 method: 'POST',
+                 headers: {'Content-Type': 'application/json'},
+                 body: JSON.stringify({
+                     room_number: currentRoom,
+                     mac: mac
+                 })
+             });
 
-            const mac = document.getElementById('mac').value;
-            
-            const res = await fetch(`${API}/connect_room_device`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    room_number: currentRoom,
-                    mac: mac
-                })
-            });
-            
-            const data = await res.json();
-            
-            if (data.status === 'success') {
-                document.getElementById('final-quota').textContent = formatBytes(data.quota);
-                showStep('success-step');
+             const data = await res.json();
+
+             if (data.status === 'success') {
+                 document.getElementById('final-quota').textContent = formatBytes(data.quota);
+                 document.getElementById('success-step').innerHTML += `<p>Connected MAC: ${mac}</p>`;
+                 showStep('success-step');
             } else {
-                alert('Failed to connect device');
-            }
+              alert('Failed to connect device');
+             }
         }
+
+
+            //const mac = document.getElementById('mac').value;
+            
+            //const res = await fetch(`${API}/connect_room_device`, {
+            //    method: 'POST',
+            //    headers: {'Content-Type': 'application/json'},
+            //    body: JSON.stringify({
+            //        room_number: currentRoom,
+            //        mac: mac
+            //    })
+            //});
+            
+            //const data = await res.json();
+            
+            //if (data.status === 'success') {
+            //    document.getElementById('final-quota').textContent = formatBytes(data.quota);
+            //    showStep('success-step');
+            //} else {
+            //    alert('Failed to connect device');
+            //}
+        //}
 
         // Auto-detect MAC from URL
         window.addEventListener('load', function() {
