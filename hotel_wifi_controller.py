@@ -47,15 +47,29 @@ class HotelWifiController(app_manager.RyuApp):
         # 启动周期性配额更新任务
         self.logger.info("🔄 启动周期性配额更新任务...")
         self.threads.append(hub.spawn(self._periodic_quota_update))
+        
+        # 启动周期性流量监控任务
+        self.logger.info("📊 启动周期性流量监控任务...")
+        self.threads.append(hub.spawn(self._periodic_traffic_monitor))
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switchFeaturesHandler(self, ev):
         """交换机连接初始化 - 默认DROP所有流量"""
         datapath = ev.msg.datapath
         
-        self.logger.info("=" * 60)
-        self.logger.info("🌐 交换机连接初始化 - 默认DROP模式")
-        self.logger.info("=" * 60)
+            self.logger.info("=" * 60)
+            self.logger.info("✅ 周期性流量监控任务完成")
+            self.logger.info("=" * 60)
+
+    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
+    def flowStatsReplyHandler(self, ev):
+        """处理flow stats响应事件"""
+        self.trafficMonitor.processFlowStatsReply(ev)
+
+    @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
+    def portStatsReplyHandler(self, ev):
+        """处理port stats响应事件"""
+        self.trafficMonitor.processPortStatsReply(ev)
         self.logger.info("📍 交换机ID: %016x", datapath.id)
         
         # 默认DROP所有流量
@@ -155,5 +169,18 @@ class HotelWifiController(app_manager.RyuApp):
             self.logger.info("=" * 60)
             self.logger.info("✅ 周期性配额更新任务完成")
             self.logger.info("=" * 60)
-            # 启动周期性任务
 
+    def _periodic_traffic_monitor(self):
+        """每5秒执行一次流量监控任务 - 读取并写入流量数据"""
+        while True:
+            hub.sleep(5)  # 每5秒执行一次
+            
+            if not self.datapaths:
+                continue
+            
+
+
+            accumulateFlowStats(self, datapath, mac_address)    
+            self.logger.info("=" * 60)
+            self.logger.info("📊 周期性流量监控任务开始")
+            self.logger.info("=" * 60)
