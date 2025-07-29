@@ -152,6 +152,9 @@
     </div>
 
     <script>
+        const DEBUG_MODE = true;   // 调试开关(true跳过验证，false需要验证才能进入下一页)
+
+
         let selectedPlan = '';
         let currentRoom = '';
         const API = 'http://127.0.0.1:5000';
@@ -198,6 +201,21 @@
                 return;
             }
 
+
+            // ====== 调试模式直接跳过后端验证 ======
+             if (DEBUG_MODE) {
+             currentRoom = roomNumber;
+             document.getElementById('current-room').textContent = roomNumber;
+             document.getElementById('current-quota').textContent = '0 GB';
+             showStep('plan-step');
+             return;
+             }
+             // =================================
+
+
+
+
+            
             const res = await fetch(`${API}/room_login`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -239,6 +257,17 @@
         }
 
         async function processPayment() {
+            
+            
+             // ====== 调试模式直接跳过后端验证 ======
+            if (DEBUG_MODE) {
+             document.getElementById('new-quota').textContent = '50 GB';
+             showStep('device-step');
+             return;
+             }
+             // =================================
+
+        
             const card = document.getElementById('card').value.replace(/\s/g, '');
             const expiry = document.getElementById('expiry').value;
             const cvv = document.getElementById('cvv').value;
@@ -276,6 +305,18 @@
         }
 
         async function connectDevice() {
+            
+            
+            // ====== 调试模式直接跳过后端验证 ======
+            if (DEBUG_MODE) {
+             document.getElementById('final-quota').textContent = '50 GB';
+             showStep('success-step');   // 直接跳到成功页面
+             return;
+             }
+             // =================================
+
+
+
             const mac = document.getElementById('mac').value;
             
             const res = await fetch(`${API}/connect_room_device`, {
