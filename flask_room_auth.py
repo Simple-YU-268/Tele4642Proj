@@ -93,6 +93,7 @@ def room_login():
                     'quota': 0,
                     'devices': [],
                     'created_at': int(time.time())
+                    
                 }
             
             # 创建会话
@@ -353,6 +354,37 @@ def add_room():
     except Exception as e:
         return jsonify({'status': 'failure', 'message': str(e)}), 500 
     
+@app.route('/delete_room', methods=['POST'])
+def delete_room():
+    """管理员删除房间数据(清零配额+恢复手机号)"""
+    try:
+        data = request.json
+        room_number = data.get('room_number')
+        if not room_number:
+            return jsonify({'status': 'failure', 'message': 'Missing room_number'}), 400
+
+        # 1️⃣ 读取两个文件
+        user_data = load_user_data()
+        with open(ROOM_AUTH_FILE, 'r') as f:
+            room_auth = json.load(f)
+
+        # 2️⃣ 清零配额
+        if room_number in user_data['users']:
+            user_data['users'][room_number]['quota'] = 0
+            save_user_data(user_data)
+
+        # 3️⃣ 恢复手机号为默认值
+        if room_number in room_auth['rooms']:
+            room_auth['rooms'][room_number] = "0000"
+            with open(ROOM_AUTH_FILE, 'w') as f:
+                json.dump(room_auth, f, indent=2)
+
+        return jsonify({'status': 'success', 'message': f'Room {room_number} reset successfully'})
+
+    except Exception as e:
+        return jsonify({'status': 'failure', 'message': str(e)}), 500
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

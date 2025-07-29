@@ -369,10 +369,27 @@
         }
 
         async function deleteRoom(room) {
-            if (confirm(`Are you sure you want to delete room ${room}?`)) {
-                alert('Manual deletion not implemented. Use room_auth.json file directly.');
-            }
+        
+         if (confirm(`Are you sure you want to delete room ${room}?`)) {
+             try {
+                 const response = await fetch('http://127.0.0.1:5000/delete_room', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ room_number: room })
+                 });
+
+                 const result = await response.json();
+                 alert(result.message);
+
+                 if (result.status === 'success') {
+                     location.reload(); // 刷新页面以显示最新状态
+                 }
+             } catch (error) {
+                 alert('Error deleting room: ' + error.message);
+             }
+          }
         }
+
 
         function exportData() {
             Promise.all([
