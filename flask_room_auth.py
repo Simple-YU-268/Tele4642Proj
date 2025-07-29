@@ -18,15 +18,15 @@ if not os.path.exists(ROOM_AUTH_FILE):
     with open(ROOM_AUTH_FILE, 'w') as f:
         json.dump({
             "rooms": {
-                "101": "1234",
-                "102": "5678",
-                "103": "9012",
-                "201": "3456",
-                "202": "7890",
-                "203": "2345",
-                "301": "6789",
-                "302": "0123",
-                "303": "4567"
+                "101": "0000",
+                "102": "0000",
+                "103": "0000",
+                "201": "0000",
+                "202": "0000",
+                "203": "0000",
+                "301": "0000",
+                "302": "0000",
+                "303": "0000"
             }
         }, f, indent=2)
 
@@ -44,15 +44,15 @@ def load_room_auth():
             return json.load(f)['rooms']
     except:
         return {
-            "101": "1234",
-            "102": "5678",
-            "103": "9012",
-            "201": "3456",
-            "202": "7890",
-            "203": "2345",
-            "301": "6789",
-            "302": "0123",
-            "303": "4567"
+            "101": "0000",
+            "102": "0000",
+            "103": "0000",
+            "201": "0000",
+            "202": "0000",
+            "203": "0000",
+            "301": "0000",
+            "302": "0000",
+            "303": "0000"
         }
 
 # 加载用户数据
@@ -322,26 +322,37 @@ def get_all_users():
 @app.route('/add_room', methods=['POST'])
 def add_room():
     """添加新房间（管理员功能）"""
+    """修改已存在房间的手机号后四位（管理员功能）"""
     try:
         data = request.json
         room_number = data.get('room_number')
         phone_last4 = data.get('phone_last4')
         
+        # 参数检查
         if not room_number or not phone_last4:
             return jsonify({'status': 'failure', 'message': 'Missing required fields'}), 400
             
         if len(phone_last4) != 4:
             return jsonify({'status': 'failure', 'message': 'Phone last 4 digits must be 4 characters'}), 400
-            
+        
+        # 加载房间数据
         room_auth = load_room_auth()
+
+        # 检查房间是否存在
+        if room_number not in room_auth:
+            return jsonify({'status': 'failure', 'message': 'Room does not exist'}), 404
+        
+        # 更新手机号后四位
         room_auth[room_number] = phone_last4
         
+        # 保存修改
         with open(ROOM_AUTH_FILE, 'w') as f:
             json.dump({'rooms': room_auth}, f, indent=2)
         
-        return jsonify({'status': 'success'})
+        return jsonify({'status': 'success', 'message': 'Room phone number updated successfully'})
     except Exception as e:
-        return jsonify({'status': 'failure', 'message': str(e)}), 500
+        return jsonify({'status': 'failure', 'message': str(e)}), 500 
+    
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
