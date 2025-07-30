@@ -330,7 +330,8 @@ def add_room():
         data = request.json
         room_number = data.get('room_number')
         phone_last4 = data.get('phone_last4')
-        
+        quota_gb = data.get('quota')  # 新增：可选字段，单位 GB
+
         # 参数检查
         if not room_number or not phone_last4:
             return jsonify({'status': 'failure', 'message': 'Missing required fields'}), 400
@@ -352,6 +353,25 @@ def add_room():
         with open(ROOM_AUTH_FILE, 'w') as f:
             json.dump({'rooms': room_auth}, f, indent=2)
         
+# 如果输入了quota，则写入user_data.json
+        if quota_gb is not None:
+            try:
+                quota_bytes = int(float(quota_gb) * 1024 * 1024 * 1024)  # GB 转换为字节
+            except ValueError:
+                return jsonify({'status': 'failure', 'message': 'Quota must be a number'}), 400
+
+            user_data = load_user_data()
+            if room_number not in user_data['users']:
+                user_data['users'][room_number] = {
+                    'quota': quota_bytes,
+                    'devices': [],
+                    'created_at': int(time.time())
+                }
+            else:
+                user_data['users'][room_number]['quota'] = quota_bytes
+
+            save_user_data(user_data)
+
         return jsonify({'status': 'success', 'message': 'Room phone number updated successfully'})
     except Exception as e:
         return jsonify({'status': 'failure', 'message': str(e)}), 500 
