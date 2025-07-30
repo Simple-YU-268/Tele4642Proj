@@ -1,6 +1,7 @@
 cd Tele4642Proj
 ryu-manager hotel_wifi_controller.py
 sudo python3 mininettopo.py
+python3 flask_room_auth.py
 
 
 

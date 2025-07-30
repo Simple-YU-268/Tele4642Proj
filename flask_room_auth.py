@@ -93,7 +93,7 @@ def room_login():
                     'quota': 0,
                     'devices': [],
                     'created_at': int(time.time())
-                    
+
                 }
             
             # 创建会话
@@ -316,7 +316,9 @@ def get_all_users():
     """获取所有用户信息"""
     try:
         user_data = load_user_data()
-        return jsonify({'users': user_data.get('users', {})})
+        return jsonify({'status': 'success', 'users': user_data['users']})
+        
+        ## return jsonify({'users': user_data.get('users', {})}) 【原来的】
     except Exception as e:
         return jsonify({'status': 'failure', 'message': str(e)}), 500
 
@@ -371,6 +373,7 @@ def delete_room():
         # 2️⃣ 清零配额
         if room_number in user_data['users']:
             user_data['users'][room_number]['quota'] = 0
+            user_data['users'][room_number]['used_traffic'] = 0
             save_user_data(user_data)
 
         # 3️⃣ 恢复手机号为默认值
