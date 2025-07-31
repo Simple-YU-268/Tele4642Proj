@@ -109,6 +109,8 @@ class TrafficMonitor:
     def saveChangedData(self):
         """根据当前lastTimeUsed中的流量值写入JSON（不再重复叠加）"""
         try:
+            self.baseQuota = self.loadUserData()
+
             for mac_address, info in self.lastTimeUsed.items():
                 room_number = info['room']
                 last_used_traffic = info['used_traffic']
