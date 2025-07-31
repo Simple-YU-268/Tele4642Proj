@@ -119,13 +119,13 @@ export PYTHONPATH=$PWD && ryu-manager hotel_wifi_controller.py
 
 #### **2. 启动认证服务器**
 ```bash
-python flask_room_auth.py
+python3 flask_room_auth.py
 # Web服务: http://localhost:5000
 ```
 
 #### **3. 启动网络拓扑**
 ```bash
-sudo python mininettopo.py
+sudo python3 mininettopo.py
 # 创建网络: 1个交换机 + 3个主机 + 1个路由器
 ```
 

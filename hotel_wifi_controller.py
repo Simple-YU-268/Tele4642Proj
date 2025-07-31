@@ -44,13 +44,13 @@ class HotelWifiController(app_manager.RyuApp):
         # 存储当前连接的交换机
         self.datapaths = {}
         
-        # 启动周期性配额更新任务
-        self.logger.info("🔄 启动周期性配额更新任务...")
-        self.threads.append(hub.spawn(self._periodic_quota_update))
-        
         # 启动周期性流量监控任务
         self.logger.info("📊 启动周期性流量监控任务...")
         self.threads.append(hub.spawn(self._periodic_traffic_monitor))
+
+         # 启动周期性配额更新任务
+        self.logger.info("🔄 启动周期性配额更新任务...")
+        self.threads.append(hub.spawn(self._periodic_quota_update))
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switchFeaturesHandler(self, ev):
@@ -121,27 +121,38 @@ class HotelWifiController(app_manager.RyuApp):
         self.logger.info("🎯 流量已记录 - 由预配置流表控制")
         self.logger.info("=" * 80)
 
-    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
-    def flowStatsReplyHandler(self, ev):
-        """处理flow stats响应事件"""
-        self.trafficMonitor.processFlowStatsReply(ev)
-
-    @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
-    def portStatsReplyHandler(self, ev):
-        """处理port stats响应事件"""
-        self.trafficMonitor.processPortStatsReply(ev)
-
-    def _periodic_quota_update(self):
-        """每5秒执行一次配额更新任务"""
+    def _periodic_traffic_monitor(self):
+        """每5秒执行一次流量监控任务 - 读取并写入流量数据"""
         while True:
-            hub.sleep(5)  # 每5秒执行一次
+            hub.sleep(1)  # 每1秒执行一次
             
             if not self.datapaths:
                 continue
                 
             self.logger.info("=" * 60)
-            self.logger.info("🔄 周期性配额更新任务开始")
+            self.logger.info("Start periodic traffic monitor")
+            
+            # 为每个连接的交换机收集流量统计
+            for dpid, datapath in self.datapaths.items():
+                try:
+                    self.logger.info("request of FlowStats of switch %016x", dpid)
+                    self.trafficMonitor.accumulateFlowStats(datapath)
+                except Exception as e:
+                    self.logger.error("! Flowrequest failed: %s", str(e))
+                        
+            self.logger.info("Finish periodic traffic monitor")
             self.logger.info("=" * 60)
+
+    def _periodic_quota_update(self):
+        """每5秒执行一次配额更新任务"""
+        while True:
+            hub.sleep(5)  # 每5秒执行一次
+            if not self.datapaths:
+                continue
+            self.baseQuota = self.trafficMonitor.loadUserData()
+            self.logger.info("=" * 60)
+            self.logger.info("Start periodic quota update")
+            self.trafficMonitor.saveChangedData()
             
             # 为每个连接的交换机更新配额流表
             for dpid, datapath in self.datapaths.items():
@@ -156,41 +167,12 @@ class HotelWifiController(app_manager.RyuApp):
             self.logger.info("✅ 周期性配额更新任务完成")
             self.logger.info("=" * 60)
 
-    def _periodic_traffic_monitor(self):
-        """每5秒执行一次流量监控任务 - 读取并写入流量数据"""
-        while True:
-            hub.sleep(5)  # 每5秒执行一次
-            
-            if not self.datapaths:
-                continue
-                
-            self.logger.info("=" * 60)
-            self.logger.info("📊 周期性流量监控任务开始")
-            self.logger.info("=" * 60)
-            
-            # 为每个连接的交换机收集流量统计
-            for dpid, datapath in self.datapaths.items():
-                try:
-                    self.logger.info("📍 收集交换机 %016x 的流量统计", dpid)
-                    
-                    # 获取当前连接的设备MAC地址列表
-                    user_data = self.trafficMonitor.loadUserData()
-                    connected_macs = []
-                    for room_number, user_info in user_data.get('users', {}).items():
-                        devices = user_info.get('devices', [])
-                        for device_mac in devices:
-                            if device_mac in self.trafficMonitor.lastTimeUsed:
-                                connected_macs.append(device_mac)
-                    
-                    # 为每个设备收集流量统计
-                    for mac_address in connected_macs:
-                        self.logger.debug("🔍 收集设备 %s 的流量统计", mac_address)
-                        self.trafficMonitor.accumulateFlowStats(datapath, mac_address)
-                    
-                    self.logger.info("✅ 交换机 %016x 流量统计收集完成", dpid)
-                except Exception as e:
-                    self.logger.error("❌ 收集交换机 %016x 流量统计失败: %s", dpid, str(e))
-            
-            self.logger.info("=" * 60)
-            self.logger.info("✅ 周期性流量监控任务完成")
-            self.logger.info("=" * 60)
+    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
+    def flowStatsReplyHandler(self, ev):
+        """处理flow stats响应事件"""
+        self.trafficMonitor.processFlowStatsReply(ev)
+
+    @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
+    def portStatsReplyHandler(self, ev):
+        """处理port stats响应事件"""
+        self.trafficMonitor.processPortStatsReply(ev)
