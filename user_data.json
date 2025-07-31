@@ -1,12 +1,12 @@
 {
   "users": {
     "101": {
-      "quota": 10737418240,
+      "quota": 21474836480,
       "devices": [
         "00:00:00:00:00:01"
       ],
       "created_at": 1752853806,
-      "used_traffic": 0
+      "used_traffic": 21135732
     },
     "102": {
       "quota": 10737418240,
@@ -28,7 +28,7 @@
   "sessions": {
     "101_1234": {
       "room_number": "101",
-      "login_time": 1752853806
+      "login_time": 1753781402
     },
     "102_5678": {
       "room_number": "102",

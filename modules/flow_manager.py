@@ -45,11 +45,7 @@ class FlowManager:
         """安装ARP相关流表 - 仅一个通用ARP规则"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        
-
-
-   
-      
+              
         # (1) Allow all ARP traffic - 通用ARP许可
         match = parser.OFPMatch(eth_type=0x0806)
         actions = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
@@ -206,22 +202,3 @@ class FlowManager:
         }
         return port_mapping.get(device_mac, ofproto_v1_3.OFPP_FLOOD)
     
-    # ================================================================================
-    # 兼容旧接口（已废弃）
-    # ================================================================================
-    
-    def installDefaultDropFlows(self, datapath):
-        """兼容旧接口 - 使用新的installDefaultFlows"""
-        self.logger.warning("⚠️  installDefaultDropFlows已废弃，使用installDefaultFlows")
-        self.installDefaultFlows(datapath)
-    
-    def clearPermitFlows(self, datapath):
-        """兼容旧接口 - 使用新的_clearQuotaFlows"""
-        self.logger.warning("⚠️  clearPermitFlows已废弃，使用_clearQuotaFlows")
-        self._clearQuotaFlows(datapath)
-    
-    def handlePacket(self, datapath, srcMac, dstMac, inPort, msg):
-        """处理数据包转发（备用，主要逻辑在updateQuotaBasedFlows）"""
-        # 此方法现在主要用于调试，实际流量由预配置的流表控制
-        pass
-
