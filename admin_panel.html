@@ -144,6 +144,7 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
                         <input type="text" id="new-room" placeholder="Room Number">
                         <input type="text" id="new-phone" placeholder="Phone Last 4 Digits">
+                        <input type="number" id="new-quota" placeholder="Quota (GB)">
                         <button class="btn" onclick="addRoom()">Add Room</button>
                     </div>
                 </div>
@@ -392,7 +393,9 @@
         async function addRoom() {
             const room = document.getElementById('new-room').value;
             const phone = document.getElementById('new-phone').value;
+            const quota = document.getElementById('new-quota').value;
             
+
             if (!room || !phone || phone.length !== 4) {
                 alert('Please enter valid room number and 4-digit phone code');
                 return;
@@ -402,7 +405,7 @@
                 const res = await fetch(`${API}/add_room`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ room_number: room, phone_last4: phone })
+                    body: JSON.stringify({ room_number: room, phone_last4: phone, quota: quota })
                 });
                 
                 const data = await res.json();
@@ -410,6 +413,7 @@
                     alert('Room added successfully');
                     document.getElementById('new-room').value = '';
                     document.getElementById('new-phone').value = '';
+                    document.getElementById('new-quota').value = '';
                     loadRooms();
                     loadDashboard();
                 } else {
