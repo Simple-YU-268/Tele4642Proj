@@ -149,7 +149,7 @@ class HotelWifiController(app_manager.RyuApp):
             hub.sleep(5)  # 每5秒执行一次
             if not self.datapaths:
                 continue
-            self.baseQuota = self.trafficMonitor.loadUserData()
+            #self.baseQuota = self.trafficMonitor.loadUserData()
             self.logger.info("=" * 60)
             self.logger.info("Start periodic quota update")
             self.trafficMonitor.saveChangedData()

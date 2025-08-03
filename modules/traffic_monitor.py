@@ -88,7 +88,7 @@ class TrafficMonitor:
     def updateUsedDataFromStats(self, flow_stats_response):
         """根据flow stats响应更新JSON中的used_data"""
         try:
-
+            self.baseQuota = self.loadUserData()
             for stat in flow_stats_response:
                 if 'eth_dst' in stat.match:
                     mac_address = stat.match.get('eth_dst')
@@ -109,6 +109,8 @@ class TrafficMonitor:
     def saveChangedData(self):
         """根据当前lastTimeUsed中的流量值写入JSON（不再重复叠加）"""
         try:
+            self.baseQuota = self.loadUserData()
+
             for mac_address, info in self.lastTimeUsed.items():
                 room_number = info['room']
                 last_used_traffic = info['used_traffic']
