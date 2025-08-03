@@ -8,17 +8,28 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background-color: #000000; /* 多余部分填充黑色 */
+            background-image: url('background.png');
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: auto; /* 保持原图大小 */
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 20px;
         }
+
+        
         .container { 
             background: white; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             width: 100%; max-width: 400px; overflow: hidden;
         }
         .header { 
-            background: linear-gradient(135deg, #667eea, #764ba2); color: white;
-            padding: 30px; text-align: center;
+            background: #000000;   /* 纯黑背景 */
+            color: #FFC72C;          /* 黄色字体 */
+            padding: 15px 30px; 
+            text-align: center;
         }
         .form-section { padding: 30px; }
         .form-group { margin-bottom: 20px; }
@@ -26,11 +37,24 @@
             width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
             font-size: 16px; transition: border-color 0.3s;
         }
-        input:focus { outline: none; border-color: #667eea; }
+        input:focus, select:focus {
+             outline: none;
+             border-color: #DA291C; /* 麦当劳红 */
+             box-shadow: 0 0 3px #DA291C;
+            }
         .btn { 
-            width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white; border: none; border-radius: 8px; font-size: 16px;
-            cursor: pointer; transition: transform 0.2s;
+            width: 100%; 
+            padding: 12px; 
+            background: #DA291C;   /* 麦当劳红 */
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-size: 16px;
+            cursor: pointer; 
+            transition: transform 0.2s;}
+        .btn:hover { 
+            background: #b71c12;   /* 深一点的红色，悬停效果 */
+            transform: translateY(-1px); 
         }
         .btn:hover { transform: translateY(-1px); }
         .btn:disabled { background: #ccc; cursor: not-allowed; transform: none; }
@@ -38,9 +62,11 @@
             border: 1px solid #ddd; border-radius: 10px; padding: 15px; margin: 10px 0;
             cursor: pointer; transition: all 0.3s;
         }
-        .plan-card:hover { border-color: #667eea; }
+        .plan-card:hover { border-color: #FFC72C; }
         .plan-card.selected { 
-            background: linear-gradient(135deg, #667eea, #764ba2); color: white;
+            border-color: #FFC72C !important;
+            background: linear-gradient(135deg, #000000, #FFC72C);
+            color: white;
         }
         .step { display: none; }
         .step.active { display: block; animation: fadeIn 0.3s; }
@@ -56,8 +82,10 @@
 <body>
     <div class="container">
         <div class="header">
-            <h2>Hotel WiFi Service</h2>
-            <p>Room Authentication</p>
+            <img src="logo.png" alt="Hotel Logo" style="width:80px; display:block; margin:0 auto -15px;">
+            
+            <h2 style="margin:0; padding:0; line-height:1;"> <span style="font-size:30px;">rn</span>cDonald's<br>
+            <span style="font-size:16px;">Hotel WiFi Service</span>
         </div>
 
         <div class="form-section">
@@ -145,16 +173,35 @@
                     <h3 style="color: #27ae60;">✓ Connected!</h3>
                     <p>Your device is now connected to hotel WiFi</p>
                     <p>Remaining Data: <span id="final-quota">0 GB</span></p>
-                    <button class="btn" onclick="location.reload()">Connect Another Device</button>
+                    <button class="btn" onclick="location.reload()" style="margin-top: 20px;">Connect Another Device</button>
                 </div>
             </div>
         </div>
     </div>
 
     <script>
+        const DEBUG_MODE = false;   // 调试开关(true跳过验证，false需要验证才能进入下一页)
+
+
         let selectedPlan = '';
         let currentRoom = '';
         const API = 'http://127.0.0.1:5000';
+
+        const roomMacMap = {
+         '101': '00:00:00:00:00:01',
+         '102': '00:00:00:00:00:02',
+         '103': '00:00:00:00:00:03',
+         '201': '00:00:00:00:00:11',
+         '202': '00:00:00:00:00:12',
+         '203': '00:00:00:00:00:13',
+         '301': '00:00:00:00:00:21',
+         '302': '00:00:00:00:00:22',
+         '303': '00:00:00:00:00:23'
+         };
+
+
+
+
 
         function showStep(step) {
             document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
@@ -174,12 +221,12 @@
             e.target.value = e.target.value.replace(/\D/g, '').replace(/(\d{2})(\d{0,2})/, '$1/$2');
         });
 
-        document.getElementById('mac').addEventListener('input', e => {
-            let value = e.target.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
-            if (value.length > 12) value = value.substring(0, 12);
-            const parts = value.match(/.{1,2}/g) || [];
-            e.target.value = parts.join(':');
-        });
+        //document.getElementById('mac').addEventListener('input', e => {
+        //    let value = e.target.value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+        //    if (value.length > 12) value = value.substring(0, 12);
+        //    const parts = value.match(/.{1,2}/g) || [];
+        //    e.target.value = parts.join(':');
+        //});
 
         document.getElementById('room-number').addEventListener('input', e => {
             e.target.value = e.target.value.replace(/[^0-9]/g, '');
@@ -198,6 +245,21 @@
                 return;
             }
 
+
+            // ====== 调试模式直接跳过后端验证 ======
+             if (DEBUG_MODE) {
+             currentRoom = roomNumber;
+             document.getElementById('current-room').textContent = roomNumber;
+             document.getElementById('current-quota').textContent = '0 GB';
+             showStep('plan-step');
+             return;
+             }
+             // =================================
+
+
+
+
+            
             const res = await fetch(`${API}/room_login`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -232,13 +294,14 @@
 
         async function confirmPlan() {
             if (selectedPlan === '0GB') {
-                showStep('device-step');
+                connectDevice();   // 直接连接
             } else {
                 showStep('payment-step');
             }
         }
 
         async function processPayment() {
+
             const card = document.getElementById('card').value.replace(/\s/g, '');
             const expiry = document.getElementById('expiry').value;
             const cvv = document.getElementById('cvv').value;
@@ -269,33 +332,66 @@
                 
                 const planData = await planRes.json();
                 document.getElementById('new-quota').textContent = formatBytes(planData.quota);
-                showStep('device-step');
+                connectDevice();
             } else {
                 alert('Payment failed');
             }
         }
 
         async function connectDevice() {
-            const mac = document.getElementById('mac').value;
             
-            const res = await fetch(`${API}/connect_room_device`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    room_number: currentRoom,
-                    mac: mac
-                })
-            });
             
-            const data = await res.json();
+            // ====== 调试模式直接跳过后端验证 ======
+            if (DEBUG_MODE) {
+             document.getElementById('final-quota').textContent = '50 GB';
+             showStep('success-step');   // 直接跳到成功页面
+             return;
+             }
+             // =================================
+
             
-            if (data.status === 'success') {
-                document.getElementById('final-quota').textContent = formatBytes(data.quota);
-                showStep('success-step');
+             const mac = roomMacMap[currentRoom] || '00:00:00:00:00:FF';
+
+             const res = await fetch(`${API}/connect_room_device`, {
+                 method: 'POST',
+                 headers: {'Content-Type': 'application/json'},
+                 body: JSON.stringify({
+                     room_number: currentRoom,
+                     mac: mac
+                 })
+             });
+
+             const data = await res.json();
+
+             if (data.status === 'success') {
+                 document.getElementById('final-quota').textContent = formatBytes(data.quota);
+                 showStep('success-step');
             } else {
-                alert('Failed to connect device');
-            }
+              alert('Failed to connect device');
+             }
         }
+
+
+            //const mac = document.getElementById('mac').value;
+            
+            //const res = await fetch(`${API}/connect_room_device`, {
+            //    method: 'POST',
+            //    headers: {'Content-Type': 'application/json'},
+            //    body: JSON.stringify({
+            //        room_number: currentRoom,
+            //        mac: mac
+            //    })
+            //});
+            
+            //const data = await res.json();
+            
+            //if (data.status === 'success') {
+            //    document.getElementById('final-quota').textContent = formatBytes(data.quota);
+            //    showStep('success-step');
+            //} else {
+            //    alert('Failed to connect device');
+            //}
+        //}
 
         // Auto-detect MAC from URL
         window.addEventListener('load', function() {

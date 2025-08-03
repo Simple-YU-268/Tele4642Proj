@@ -8,7 +8,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #2c3e50, #34495e);
+            background: linear-gradient(#DA291C, #000000);
             min-height: 100vh; padding: 20px;
         }
         .container { 
@@ -16,20 +16,55 @@
             border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);
             overflow: hidden;
         }
-        .header { 
-            background: linear-gradient(135deg, #e74c3c, #c0392b); color: white;
-            padding: 30px; text-align: center;
-        }
+      
+        .header {
+    display: flex;
+    align-items: center;      /* logo 与文字垂直对齐 */
+    background-color: #000000;
+    color: #FFC72C;
+    padding-top: 5px;   /* 改小上间距 */
+    padding-bottom: 0px; /* 保持下间距不变 */
+    padding-left: 20px;
+    padding-right: 20px;
+    font-size: 24px;
+
+}
+
+.logo {
+    width: 60px;
+    height: auto;
+    margin-right: 15px;       /* logo 与文字的间距 */
+}
+
+.title-text {
+    display: flex;
+    flex-direction: column;   /* 文字上下排列 */
+    justify-content: center;  /* 垂直居中 */
+}
+
+.title-text h1 {
+    margin: 0;
+    font-size: 20px;
+}
+
+.title-text p {
+    margin: 2px 0 0;
+    font-size: 14px;
+}
+
         .nav { 
-            background: #34495e; padding: 15px; display: flex; gap: 20px;
+            background: #000000; padding: 15px; display: flex; gap: 20px;
             justify-content: center; flex-wrap: wrap;
         }
         .nav button {
-            background: #3498db; color: white; border: none; padding: 10px 20px;
+            background: #FFC72C; color: #000000; border: none; padding: 10px 20px;
             border-radius: 5px; cursor: pointer; transition: background 0.3s;
         }
-        .nav button:hover { background: #2980b9; }
-        .nav button.active { background: #e74c3c; }
+        .nav button:hover, 
+.nav button:focus {
+    background-color: #E0AC00;   /* 深黄 */
+}
+        .nav button.active { background: #DA291C; color: #ffffff;}
         .content { padding: 30px; }
         .section { display: none; }
         .section.active { display: block; }
@@ -40,10 +75,10 @@
             border-radius: 5px; font-size: 14px;
         }
         .btn { 
-            background: #3498db; color: white; border: none; padding: 10px 20px;
+            background: #e74c3c; color: white; border: none; padding: 10px 20px;
             border-radius: 5px; cursor: pointer; transition: background 0.3s;
         }
-        .btn:hover { background: #2980b9; }
+        .btn:hover { background: #c0392b; }
         .btn.danger { background: #e74c3c; }
         .btn.danger:hover { background: #c0392b; }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -53,7 +88,7 @@
         .stat-card { 
             background: #f8f9fa; padding: 20px; border-radius: 10px; text-align: center;
         }
-        .stat-number { font-size: 24px; font-weight: bold; color: #3498db; }
+        .stat-number { font-size: 24px; font-weight: bold; color: #DA291C; }
         .error { color: #e74c3c; }
         .success { color: #27ae60; }
     </style>
@@ -61,9 +96,13 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Hotel WiFi Admin Panel</h1>
-            <p>Room Authentication System</p>
+            <img src="logo.png" alt="Hotel Logo" class="logo">
+            <div class="title-text">
+                <h1>Hotel WiFi Admin Panel</h1>
+                <p>Room Authentication System</p>
+            </div>
         </div>
+
 
         <div class="nav">
             <button onclick="showSection('dashboard')" class="active">Dashboard</button>
@@ -105,6 +144,7 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
                         <input type="text" id="new-room" placeholder="Room Number">
                         <input type="text" id="new-phone" placeholder="Phone Last 4 Digits">
+                        <input type="number" id="new-quota" placeholder="Quota (GB)">
                         <button class="btn" onclick="addRoom()">Add Room</button>
                     </div>
                 </div>
@@ -116,6 +156,7 @@
                             <th>Room Number</th>
                             <th>Phone Last 4</th>
                             <th>Data Quota (GB)</th>
+                            <th>Used Traffic (GB)</th>
                             <th>Devices</th>
                             <th>Actions</th>
                         </tr>
@@ -135,6 +176,7 @@
                             <th>Room Number</th>
                             <th>MAC Address</th>
                             <th>Data Quota (GB)</th>
+                            <th>Used Traffic (GB)</th>
                             <th>Status</th>
                         </tr>
                     </thead>
@@ -245,6 +287,7 @@
                         <td>${room}</td>
                         <td>${phone}</td>
                         <td>${((user.quota || 0) / (1024**3)).toFixed(2)}</td>
+                        <td>${((user.used_traffic || 0) / (1024**3)).toFixed(2)} </td>
                         <td>${(user.devices || []).length}</td>
                         <td>
                             <button class="btn danger" onclick="deleteRoom('${room}')">Delete</button>
@@ -284,51 +327,61 @@
         }
 
         async function loadDevices() {
-            try {
-                const userRes = await fetch('http://127.0.0.1:5000/get_all_users');
-                const userData = await userRes.json();
-                
-                const tbody = document.getElementById('devices-table');
-                tbody.innerHTML = '';
-                
-                Object.entries(userData.users || {}).forEach(([room, user]) => {
-                    (user.devices || []).forEach(mac => {
-                        const row = tbody.insertRow();
-                        row.innerHTML = `
-                            <td>${room}</td>
-                            <td>${mac}</td>
-                            <td>${((user.quota || 0) / (1024**3)).toFixed(2)}</td>
-                            <td>${(user.quota || 0) > 0 ? 'Active' : 'Quota Exceeded'}</td>
-                        `;
-                    });
-                });
-            } catch (error) {
-                console.error('Error loading devices:', error);
-                // Fallback to direct file reading
-                try {
-                    const userRes = await fetch('user_data.json');
-                    const userData = await userRes.json();
-                    
-                    const tbody = document.getElementById('devices-table');
-                    tbody.innerHTML = '';
-                    
-                    Object.entries(userData.users || {}).forEach(([room, user]) => {
-                        (user.devices || []).forEach(mac => {
-                            const row = tbody.insertRow();
-                            row.innerHTML = `
-                                <td>${room}</td>
-                                <td>${mac}</td>
-                                <td>${((user.quota || 0) / (1024**3)).toFixed(2)}</td>
-                                <td>${(user.quota || 0) > 0 ? 'Active' : 'Quota Exceeded'}</td>
-                            `;
-                        });
-                    });
-                } catch (fallbackError) {
-                    console.error('Fallback also failed:', fallbackError);
-                }
-            }
-        }
+             try {
+                 const userRes = await fetch('http://127.0.0.1:5000/get_all_users');
+                 const userData = await userRes.json();
+        
+                 const tbody = document.getElementById('devices-table');
+                 tbody.innerHTML = '';
+        
+                 Object.entries(userData.users || {}).forEach(([room, user]) => {
+                     (user.devices || []).forEach(mac => {
+                         const quotaGB = (user.quota || 0) / (1024**3);
+                         const usedGB = (user.used_traffic || 0) / (1024**3);
+                         const status = quotaGB <= 0 || usedGB >= quotaGB ? 'Quota Exceeded' : 'Active';
 
+                         const row = tbody.insertRow();
+                         row.innerHTML = `
+                         <td>${room}</td>
+                         <td>${mac}</td>
+                         <td>${quotaGB.toFixed(2)}</td>
+                         <td>${usedGB.toFixed(2)}</td>       
+                         <td>${status}</td>
+                         `;
+                     });
+                 });
+             } catch (error) {
+                 console.error('Error loading devices:', error);
+                 // Fallback to direct file reading
+                 try {
+                     const userRes = await fetch('user_data.json');
+                     const userData = await userRes.json();
+                
+                     const tbody = document.getElementById('devices-table');
+                     tbody.innerHTML = '';
+               
+                     Object.entries(userData.users || {}).forEach(([room, user]) => {
+                         (user.devices || []).forEach(mac => {
+                             const quotaGB = (user.quota || 0) / (1024**3);
+                             const usedGB = (user.used_traffic || 0) / (1024**3);
+                             const status = quotaGB <= 0 || usedGB >= quotaGB ? 'Quota Exceeded' : 'Active';
+
+
+                             const row = tbody.insertRow();
+                             row.innerHTML = `
+                             <td>${room}</td>
+                             <td>${mac}</td>
+                             <td>${quotaGB.toFixed(2)}</td>
+                             <td>${usedGB.toFixed(2)}</td>   
+                             <td>${status}</td>
+                             `;
+                         });
+                     });
+                 } catch (fallbackError) {
+                     console.error('Fallback also failed:', fallbackError);
+                 }
+             }
+         }
         async function loadSettings() {
             document.getElementById('system-status').innerHTML = `
                 <div class="success">✅ Room Authentication System Running</div>
@@ -340,7 +393,9 @@
         async function addRoom() {
             const room = document.getElementById('new-room').value;
             const phone = document.getElementById('new-phone').value;
+            const quota = document.getElementById('new-quota').value;
             
+
             if (!room || !phone || phone.length !== 4) {
                 alert('Please enter valid room number and 4-digit phone code');
                 return;
@@ -350,7 +405,7 @@
                 const res = await fetch(`${API}/add_room`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ room_number: room, phone_last4: phone })
+                    body: JSON.stringify({ room_number: room, phone_last4: phone, quota: quota })
                 });
                 
                 const data = await res.json();
@@ -358,6 +413,7 @@
                     alert('Room added successfully');
                     document.getElementById('new-room').value = '';
                     document.getElementById('new-phone').value = '';
+                    document.getElementById('new-quota').value = '';
                     loadRooms();
                     loadDashboard();
                 } else {
@@ -369,10 +425,31 @@
         }
 
         async function deleteRoom(room) {
-            if (confirm(`Are you sure you want to delete room ${room}?`)) {
-                alert('Manual deletion not implemented. Use room_auth.json file directly.');
-            }
+        
+         if (confirm(`Are you sure you want to delete room ${room}?`)) {
+             try {
+                 const response = await fetch('http://127.0.0.1:5000/delete_room', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ room_number: room })
+                 });
+
+                 const result = await response.json();
+                 alert(result.message);
+
+                 if (result.status === 'success') {
+                    // ✅ 只刷新房间表格，不跳转 Dashboard
+                     loadRooms();
+                     loadDashboard(); 
+                
+                    // location.reload(); // 刷新页面以显示最新状态
+                 }
+             } catch (error) {
+                 alert('Error deleting room: ' + error.message);
+             }
+          }
         }
+
 
         function exportData() {
             Promise.all([
