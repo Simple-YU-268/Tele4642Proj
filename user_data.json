@@ -1,12 +1,12 @@
 {
   "users": {
     "101": {
-      "quota": 11811160064,
+      "quota": 10737418240,
       "devices": [
         "00:00:00:00:00:01"
       ],
       "created_at": 1752853806,
-      "used_traffic": 1336566864
+      "used_traffic": 0
     },
     "102": {
       "quota": 10737418240,
@@ -23,20 +23,64 @@
       ],
       "created_at": 1752856101,
       "used_traffic": 0
+    },
+    "201": {
+      "quota": 10737418240,
+      "devices": [
+        "00:00:00:00:00:0a"
+      ],
+      "created_at": 1752853806,
+      "used_traffic": 0
+    },
+    "202": {
+      "quota": 10737418240,
+      "devices": [
+        "00:00:00:00:00:0b"
+      ],
+      "created_at": 1752856101,
+      "used_traffic": 0
+    },
+    "203": {
+      "quota": 10737418240,
+      "devices": [
+        "00:00:00:00:00:0c"
+      ],
+      "created_at": 1752856101,
+      "used_traffic": 0
+    },
+    "301": {
+      "quota": 10737418240,
+      "devices": [
+        "00:00:00:00:00:15"
+      ],
+      "created_at": 1752853806,
+      "used_traffic": 0
+    },
+    "302": {
+      "quota": 10737418240,
+      "devices": [
+        "00:00:00:00:00:16"
+      ],
+      "created_at": 1752856101,
+      "used_traffic": 0
+    },
+    "303": {
+      "quota": 10737418240,
+      "devices": [
+        "00:00:00:00:00:17"
+      ],
+      "created_at": 1752856101,
+      "used_traffic": 181460166
     }
   },
   "sessions": {
     "101_1234": {
       "room_number": "101",
-      "login_time": 1754205403
+      "login_time": 1753630971
     },
     "102_5678": {
       "room_number": "102",
       "login_time": 1752856101
-    },
-    "101_0000": {
-      "room_number": "101",
-      "login_time": 1754193432
     }
   }
 }
