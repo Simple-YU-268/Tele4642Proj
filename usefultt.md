@@ -3,6 +3,8 @@ ryu-manager hotel_wifi_controller.py
 sudo python3 mininettopo.py
 python3 flask_room_auth.py
 
+h1 iperf -s &
+router iperf -c h1 -b 100M -t 60
 
 
 
