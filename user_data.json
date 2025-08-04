@@ -49,7 +49,7 @@
       "used_traffic": 0
     },
     "301": {
-      "quota": 10737418240,
+      "quota": 0,
       "devices": [
         "00:00:00:00:00:15"
       ],
@@ -65,12 +65,12 @@
       "used_traffic": 0
     },
     "303": {
-      "quota": 10737418240,
+      "quota": 1073741824,
       "devices": [
         "00:00:00:00:00:17"
       ],
       "created_at": 1752856101,
-      "used_traffic": 181460166
+      "used_traffic": 0
     }
   },
   "sessions": {
@@ -81,6 +81,10 @@
     "102_5678": {
       "room_number": "102",
       "login_time": 1752856101
+    },
+    "303_1234": {
+      "room_number": "303",
+      "login_time": 1754296209
     }
   }
 }
