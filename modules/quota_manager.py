@@ -82,6 +82,11 @@ class QuotaManager:
         
         for room_number, user_info in user_data.get('users', {}).items():
             if mac_address in user_info.get('devices', []):
+                if user_info.get('reset', False):
+                    self.logger.info("跳过房间%s设备%s的一次流量更新（刚重置）", room_number, mac_address)
+                    user_info['reset'] = False  # ✅ 清除标志
+                    self.saveUserData(user_data)
+                    return True
                 current_used = user_info.get('used_traffic', 0)
                 user_info['used_traffic'] = current_used + bytes_count
                 
@@ -96,7 +101,6 @@ class QuotaManager:
                                       room_number, mac_address, 
                                       used / (1024**3), quota / (1024**3))
                     flow_update_needed = True
-                
                 self.saveUserData(user_data)
                 
                 # 如果需要更新流表
@@ -114,7 +118,7 @@ class QuotaManager:
         for room_number, user_info in user_data.get('users', {}).items():
             if mac_address in user_info.get('devices', []):
                 user_info['used_traffic'] = 0
-                
+                user_info['reset'] = True  # ✅ 设置跳过标志
                 self.saveUserData(user_data)
                 self.logger.info("重置房间%s设备%s的流量使用", room_number, mac_address)
                 return True
@@ -147,6 +151,5 @@ class QuotaManager:
         # 这里需要获取当前连接的交换机并更新流表
         # 由于无法直接获取交换机列表，我们记录日志
         self.logger.info("🔄 配额状态变化，需要更新流表")
-        
         # 在实际应用中，这里应该调用flowManager.updateQuotaBasedFlows
         # 但需要通过控制器获取当前连接的交换机

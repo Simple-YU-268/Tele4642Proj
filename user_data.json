@@ -6,7 +6,8 @@
         "00:00:00:00:00:01"
       ],
       "created_at": 1752853806,
-      "used_traffic": 0
+      "used_traffic": 0,
+      "reset_flag": false
     },
     "102": {
       "quota": 10737418240,
@@ -14,7 +15,8 @@
         "00:00:00:00:00:02"
       ],
       "created_at": 1752856101,
-      "used_traffic": 0
+      "used_traffic": 0,
+      "reset_flag": false
     },
     "103": {
       "quota": 10737418240,
@@ -22,7 +24,8 @@
         "00:00:00:00:00:03"
       ],
       "created_at": 1752856101,
-      "used_traffic": 0
+      "used_traffic": 0,
+      "reset_flag": false
     },
     "201": {
       "quota": 10737418240,
@@ -30,7 +33,8 @@
         "00:00:00:00:00:0a"
       ],
       "created_at": 1752853806,
-      "used_traffic": 0
+      "used_traffic": 0,
+      "reset_flag": false
     },
     "202": {
       "quota": 10737418240,
@@ -38,7 +42,8 @@
         "00:00:00:00:00:0b"
       ],
       "created_at": 1752856101,
-      "used_traffic": 0
+      "used_traffic": 0,
+      "reset_flag": false
     },
     "203": {
       "quota": 10737418240,
@@ -46,7 +51,8 @@
         "00:00:00:00:00:0c"
       ],
       "created_at": 1752856101,
-      "used_traffic": 0
+      "used_traffic": 0,
+      "reset_flag": false
     },
     "301": {
       "quota": 0,
@@ -54,7 +60,8 @@
         "00:00:00:00:00:15"
       ],
       "created_at": 1752853806,
-      "used_traffic": 0
+      "used_traffic": 0,
+      "reset_flag": false
     },
     "302": {
       "quota": 10737418240,
@@ -62,7 +69,8 @@
         "00:00:00:00:00:16"
       ],
       "created_at": 1752856101,
-      "used_traffic": 0
+      "used_traffic": 0,
+      "reset_flag": false
     },
     "303": {
       "quota": 1073741824,
@@ -70,7 +78,8 @@
         "00:00:00:00:00:17"
       ],
       "created_at": 1752856101,
-      "used_traffic": 0
+      "used_traffic": 0,
+      "reset_flag": false
     }
   },
   "sessions": {

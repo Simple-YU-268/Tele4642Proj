@@ -17,8 +17,6 @@ class TrafficMonitor:
         self.userDataFile = 'user_data.json'
         self.lock = Lock()
         self.lastTimeUsed = self._loadInitialTraffic()  # 程序运行期间不变的变量
-        self.baseQuota = self.loadUserData()
-
     
     def loadUserData(self):
         """加载用户数据"""
@@ -43,7 +41,8 @@ class TrafficMonitor:
                 for device_mac in devices:
                     initial_traffic[device_mac] = {
                         'used_traffic': used_traffic,
-                        'room': room_number
+                        'room': room_number,
+                        'reset_flag': False
                     }
             
             return initial_traffic
@@ -76,7 +75,6 @@ class TrafficMonitor:
     def processFlowStatsReply(self, ev):
         """处理flow stats响应事件"""
         body = ev.msg.body
-        #self.logger.info("Flow Entry:\n%s\n", body)
         self.updateUsedDataFromStats(body)
             
     def processPortStatsReply(self, ev):
@@ -88,18 +86,18 @@ class TrafficMonitor:
     def updateUsedDataFromStats(self, flow_stats_response):
         """根据flow stats响应更新JSON中的used_data"""
         try:
-            self.baseQuota = self.loadUserData()
+            user_data = self.loadUserData()
             for stat in flow_stats_response:
                 if 'eth_dst' in stat.match:
                     mac_address = stat.match.get('eth_dst')
                     packet_count = stat.packet_count
                     byte_count = stat.byte_count
                     # 累加流量到lastTimeUsed
-                    for room, info in self.baseQuota.get('users', {}).items():
+                    for room, info in user_data.get('users', {}).items():
                         devices = info.get('devices', [])
                         if mac_address in devices:
                             current_traffic = info.get('used_traffic', 0)
-                            self.logger.info("current_traffic:\n%s", current_traffic)
+                            #self.logger.info("current_traffic:\n%s", current_traffic)
                             new_traffic = current_traffic + byte_count
                             self.lastTimeUsed[mac_address]['used_traffic'] = new_traffic   
                             break
@@ -109,16 +107,21 @@ class TrafficMonitor:
     def saveChangedData(self):
         """根据当前lastTimeUsed中的流量值写入JSON（不再重复叠加）"""
         try:
-            self.baseQuota = self.loadUserData()
-
+            user_data = self.loadUserData()
             for mac_address, info in self.lastTimeUsed.items():
                 room_number = info['room']
-                last_used_traffic = info['used_traffic']
-                if room_number in self.baseQuota.get('users', {}):
-                    self.baseQuota['users'][room_number]['used_traffic'] = last_used_traffic
-
-                self.saveUserData(self.baseQuota)
-                self.logger.info("✅ 所有数据保存完毕")
+                reset_flag = user_data['users'][room_number].get('reset_flag', False)
+                if reset_flag is True:
+                    last_used_traffic = 0
+                    info['used_traffic'] = 0   # 这里同步清零lastTimeUsed里的流量
+                    user_data['users'][room_number]['reset_flag'] = False
+                else:
+                    last_used_traffic = info['used_traffic']
+                if room_number in user_data.get('users', {}):
+                    user_data['users'][room_number]['used_traffic'] = last_used_traffic
+            self.logger.info("user_data:\n%s\n", user_data)
+            self.saveUserData(user_data)
+            self.logger.info("✅ 所有数据保存完毕")
 
         except Exception as e:
             self.logger.error("Error Saving used_data from stats: %s", str(e))
