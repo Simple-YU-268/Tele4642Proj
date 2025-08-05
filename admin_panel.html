@@ -142,14 +142,22 @@
                 <div class="form-group">
                     <label>Add New Room</label>
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
-                        <input type="text" id="new-room" placeholder="Room Number">
-                        <input type="text" id="new-phone" placeholder="Phone Last 4 Digits">
+                        <input type="text" id="new-room" placeholder="Room Number" maxlength="3" oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0,3);">
+                        <input type="text" id="new-phone" placeholder="Phone Last 4 Digits" maxlength="4" oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0,4);">
                         <input type="number" id="new-quota" placeholder="Quota (GB)">
                         <button class="btn" onclick="addRoom()">Add Room</button>
                     </div>
                 </div>
 
-                <h3>Current Rooms</h3>
+                <h3 style="display:flex; justify-content:space-between; align-items:center;">
+                <span>Current Rooms</span>
+                <label style="font-size:14px; font-weight:normal; display:flex; align-items:center; gap:5px; white-space:nowrap;">
+                Auto Refresh
+                <input type="checkbox" id="auto-refresh-rooms" onclick="toggleAutoRefresh()">
+                </label>
+            </h3>
+
+
                 <table>
                     <thead>
                         <tr>
@@ -169,7 +177,15 @@
             <!-- Devices Management -->
             <div id="devices" class="section">
                 <h2>Connected Devices</h2>
-                <h3>All Registered Devices</h3>
+                <h3 style="display:flex; justify-content:space-between; align-items:center;">
+                <span>All Registered Devices</span>
+                <label style="font-size:14px; font-weight:normal; display:flex; align-items:center; gap:5px; white-space:nowrap;">
+                Auto Refresh
+                <input type="checkbox" id="auto-refresh-devices" onclick="toggleAutoRefresh()">
+                </label>
+            </h3>
+
+                
                 <table>
                     <thead>
                         <tr>
@@ -479,6 +495,40 @@
         loadRooms();
         loadDevices();
         loadSettings();
+    
+  
+    let autoRefreshEnabled = {
+        rooms: false,
+        devices: false
+    };
+
+    function toggleAutoRefresh() {
+        autoRefreshEnabled.rooms = document.getElementById('auto-refresh-rooms')?.checked || false;
+        autoRefreshEnabled.devices = document.getElementById('auto-refresh-devices')?.checked || false;
+    }
+
+    // 每1秒检查是否需要刷新
+    setInterval(() => {
+        if (autoRefreshEnabled.rooms && document.getElementById('rooms').classList.contains('active')) {
+            loadRooms();
+        }
+        if (autoRefreshEnabled.devices && document.getElementById('devices').classList.contains('active')) {
+            loadDevices();
+        }
+    }, 1000);
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     </script>
 </body>
 </html>
