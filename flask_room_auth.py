@@ -394,6 +394,7 @@ def delete_room():
         if room_number in user_data['users']:
             user_data['users'][room_number]['quota'] = 0
             user_data['users'][room_number]['used_traffic'] = 0
+            user_data['users'][room_number]['reset_flag'] = True
             save_user_data(user_data)
 
         # 3️⃣ 恢复手机号为默认值
