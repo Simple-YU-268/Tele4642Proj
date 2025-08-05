@@ -91,7 +91,8 @@ def room_login():
             if room_number not in user_data['users']:
                 user_data['users'][room_number] = {
                     'quota': 0,
-                    'devices': [],
+                    'used_traffic': 0,
+                    'vlan_id': int(room_number),
                     'created_at': int(time.time())
 
                 }
@@ -109,7 +110,7 @@ def room_login():
                 'status': 'success',
                 'room_number': room_number,
                 'quota': user_data['users'][room_number]['quota'],
-                'devices': user_data['users'][room_number]['devices']
+                'vlan_id': user_data['users'][room_number]['vlan_id']
             })
         else:
             return jsonify({'status': 'failure', 'message': 'Invalid room number or phone last 4 digits'}), 401
@@ -176,73 +177,7 @@ def room_payment():
 
 @app.route('/connect_room_device', methods=['POST'])
 def connect_room_device():
-    """连接房间设备"""
-    try:
-        data = request.json
-        room_number = data.get('room_number')
-        mac = data.get('mac')
-        
-        if not room_number or not mac:
-            return jsonify({'status': 'failure', 'message': 'Missing required fields'}), 400
-            
-        # 验证MAC地址格式
-        mac_pattern = re.compile(r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$')
-        if not mac_pattern.match(mac):
-            return jsonify({'status': 'failure', 'message': 'Invalid MAC address format'}), 400
-        
-        user_data = load_user_data()
-        
-        if room_number not in user_data['users']:
-            return jsonify({'status': 'failure', 'message': 'Room not found'}), 400
-            
-        if mac not in user_data['users'][room_number]['devices']:
-            user_data['users'][room_number]['devices'].append(mac)
-        
-        # 添加到SDN白名单 - 智能处理所有响应状态
-        try:
-            response = requests.post(f'{RYU_CONTROLLER_URL}/addToWhitelist', json={'mac': mac}, timeout=5)
-            if response.status_code == 200:
-                # 成功添加到SDN白名单
-                save_user_data(user_data)
-                return jsonify({
-                    'status': 'success', 
-                    'quota': user_data['users'][room_number]['quota'],
-                    'message': 'Device successfully connected to network'
-                })
-            elif response.status_code == 409:
-                # 第135行：409冲突表示MAC已存在，视为成功添加（增加配额概念）
-                save_user_data(user_data)
-                return jsonify({
-                    'status': 'success', 
-                    'quota': user_data['users'][room_number]['quota'],
-                    'message': 'Device already authorized, extending existing connection'
-                })
-            else:
-                # 其他HTTP状态码，本地注册成功
-                save_user_data(user_data)
-                return jsonify({
-                    'status': 'success', 
-                    'quota': user_data['users'][room_number]['quota'],
-                    'message': 'Device registered locally, network access configured'
-                })
-        except requests.exceptions.RequestException:
-            # 网络错误或SDN控制器未运行，本地注册成功
-            save_user_data(user_data)
-            return jsonify({
-                'status': 'success', 
-                'quota': user_data['users'][room_number]['quota'],
-                'message': 'Device connected via local registry, network access available'
-            })
-        except Exception as e:
-            # 其他异常，本地注册成功
-            save_user_data(user_data)
-            return jsonify({
-                'status': 'success', 
-                'quota': user_data['users'][room_number]['quota'],
-                'message': f'Device registered successfully: {str(e)}'
-            })
-    except Exception as e:
-        return jsonify({'status': 'failure', 'message': str(e)}), 500
+    return jsonify({'status': 'success', 'message': 'VLAN模式下无需单独注册设备'})
 
 @app.route('/get_room_quota', methods=['GET'])
 def get_room_quota():
@@ -258,7 +193,7 @@ def get_room_quota():
             return jsonify({
                 'status': 'success',
                 'quota': user_data['users'][room_number]['quota'],
-                'devices': user_data['users'][room_number]['devices']
+                'vlan_id': user_data['users'][room_number]['vlan_id']
             })
         
         return jsonify({'status': 'failure', 'message': 'Room not found'}), 400
@@ -275,29 +210,25 @@ def consume_room_traffic():
         
         if not room_number or usage is None:
             return jsonify({'status': 'failure', 'message': 'Missing required fields'}), 400
-            
+
         user_data = load_user_data()
-        
+
         if room_number in user_data['users']:
-            user_data['users'][room_number]['quota'] -= usage
-            
-            if user_data['users'][room_number]['quota'] <= 0:
-                # 移除所有设备的白名单
-                for mac in user_data['users'][room_number]['devices']:
-                    try:
-                        requests.post(f'{RYU_CONTROLLER_URL}/removeFromWhitelist', json={'mac': mac}, timeout=3)
-                    except:
-                        pass
-                
-                user_data['users'][room_number]['quota'] = 0
-                user_data['users'][room_number]['devices'] = []
-                save_user_data(user_data)
-                
+            # 增加已用流量
+            user_data['users'][room_number]['used_traffic'] = \
+                user_data['users'][room_number].get('used_traffic', 0) + usage
+
+            quota = user_data['users'][room_number].get('quota', 0)
+            used = user_data['users'][room_number]['used_traffic']
+
+            save_user_data(user_data)
+
+            if used >= quota:
                 return jsonify({'status': 'quota_exceeded', 'remaining_quota': 0})
             else:
-                save_user_data(user_data)
-                return jsonify({'status': 'success', 'remaining_quota': user_data['users'][room_number]['quota']})
-        
+                remaining = quota - used
+                return jsonify({'status': 'success', 'remaining_quota': remaining})
+
         return jsonify({'status': 'failure', 'message': 'Room not found'}), 400
     except Exception as e:
         return jsonify({'status': 'failure', 'message': str(e)}), 500
@@ -364,7 +295,8 @@ def add_room():
             if room_number not in user_data['users']:
                 user_data['users'][room_number] = {
                     'quota': quota_bytes,
-                    'devices': [],
+                    'used_traffic': 0,
+                    'vlan_id': int(room_number),
                     'created_at': int(time.time())
                 }
             else:

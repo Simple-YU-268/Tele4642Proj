@@ -56,6 +56,28 @@ class QuotaManager:
         
         return devices_with_quota
     
+    def getRoomsWithQuota(self):
+        """获取所有有剩余配额的房间"""
+        user_data = self.loadUserData()
+        rooms_with_quota = []
+
+        for room_number, user_info in user_data.get('users', {}).items():
+            quota = user_info.get('quota', 0)
+            used = user_info.get('used_traffic', 0)
+            remaining = quota - used
+
+            if remaining > 0:
+                rooms_with_quota.append({
+                    'room': room_number,
+                    'remaining': remaining
+                })
+
+        return rooms_with_quota
+
+
+
+
+    
     def addQuotaForDevice(self, mac_address, additional_bytes):
         """为设备增加配额（购买流量）"""
         user_data = self.loadUserData()
@@ -75,6 +97,23 @@ class QuotaManager:
         
         return False
     
+    def addQuotaForRoom(self, room_number, additional_bytes):
+        """为房间增加配额"""
+        user_data = self.loadUserData()
+
+        if room_number in user_data.get('users', {}):
+            current_quota = user_data['users'][room_number].get('quota', 0)
+            user_data['users'][room_number]['quota'] = current_quota + additional_bytes
+            self.saveUserData(user_data)
+            self.logger.info("为房间%s增加配额: +%.1fGB",
+                         room_number, additional_bytes / (1024**3))
+            self._triggerFlowUpdate()
+            return True
+        return False
+
+
+
+
     def updateUserTraffic(self, mac_address, bytes_count):
         """更新用户流量使用并检查配额状态"""
         user_data = self.loadUserData()
@@ -107,6 +146,29 @@ class QuotaManager:
         
         return False
     
+    def updateRoomTraffic(self, room_number, bytes_count):
+        """增加房间流量使用并检查配额状态"""
+        user_data = self.loadUserData()
+        if room_number in user_data.get('users', {}):
+            current_used = user_data['users'][room_number].get('used_traffic', 0)
+            user_data['users'][room_number]['used_traffic'] = current_used + bytes_count
+
+            quota = user_data['users'][room_number].get('quota', 0)
+            used = user_data['users'][room_number]['used_traffic']
+
+            self.saveUserData(user_data)
+            if used >= quota:
+                self.logger.warning("⚠️ 房间%s配额已用完: %.1fGB/%.1fGB",
+                                room_number, used/(1024**3), quota/(1024**3))
+                self._triggerFlowUpdate()
+            return True
+        return False
+
+
+
+
+
+
     def resetDeviceTraffic(self, mac_address):
         """重置设备流量使用"""
         user_data = self.loadUserData()
@@ -121,24 +183,35 @@ class QuotaManager:
         
         return False
     
+    def resetRoomTraffic(self, room_number):
+        """重置房间流量使用"""
+        user_data = self.loadUserData()
+        if room_number in user_data.get('users', {}):
+            user_data['users'][room_number]['used_traffic'] = 0
+            self.saveUserData(user_data)
+            self.logger.info("重置房间%s的流量使用", room_number)
+            return True
+        return False
+
+
+
+
+
+
     def getQuotaStatus(self):
         """获取所有设备的配额状态"""
         user_data = self.loadUserData()
         status = {}
         
         for room_number, user_info in user_data.get('users', {}).items():
-            devices = user_info.get('devices', [])
             quota = user_info.get('quota', 0)
             used = user_info.get('used_traffic', 0)
-            
-            for device_mac in devices:
-                status[device_mac] = {
-                    'room': room_number,
-                    'quota': quota,
-                    'used': used,
-                    'remaining': quota - used,
-                    'has_quota': (quota - used) > 0
-                }
+            status[room_number] = {
+                'quota': quota,
+                'used': used,
+                'remaining': quota - used,
+                'has_quota': (quota - used) > 0
+            }
         
         return status
     

@@ -120,6 +120,13 @@ class HotelWifiController(app_manager.RyuApp):
         
         self.logger.info("🎯 流量已记录 - 由预配置流表控制")
         self.logger.info("=" * 80)
+        
+        vlan_id = msg.match.get('vlan_vid', None)
+        if vlan_id:
+            vlan_id = vlan_id & 0x0fff
+            self.logger.debug("📥 PacketIn VLAN=%s", vlan_id)
+
+
 
     def _periodic_traffic_monitor(self):
         """每5秒执行一次流量监控任务 - 读取并写入流量数据"""
@@ -157,7 +164,7 @@ class HotelWifiController(app_manager.RyuApp):
             # 为每个连接的交换机更新配额流表
             for dpid, datapath in self.datapaths.items():
                 try:
-                    self.logger.info("📍 更新交换机 %016x 的配额流表", dpid)
+                    self.logger.info("🔄 VLAN模式：根据房间配额更新流表...")
                     self.flowManager.updateQuotaBasedFlows(datapath, self.quotaManager)
                     self.logger.info("✅ 交换机 %016x 配额流表更新完成", dpid)
                 except Exception as e:

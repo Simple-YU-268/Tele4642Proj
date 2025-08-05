@@ -71,27 +71,22 @@ class FlowManager:
         # 3. 为每个有配额的设备下发许可流表
         permit_count = 0
         for room_number, user_info in users.items():
-            devices = user_info.get('devices', [])
+            vlan_id = user_info.get('vlan_id', None)
             quota = user_info.get('quota', 0)
             used = user_info.get('used_traffic', 0)
             
             remaining = quota - used
             
-            if remaining > 0:
-                for device_mac in devices:
-                    self._installDevicePermitFlows(datapath, device_mac)
-                    permit_count += 1
-                    self.logger.info("   ✅ 房间%s设备%s: 剩余%.1fGB", 
-                                   room_number, device_mac, remaining / (1024**3))
-        
-        self.logger.info("📊 许可流表更新完成: %d个设备获得访问权限", permit_count)
+            if vlan_id and remaining > 0:
+                self._installVlanPermitFlows(datapath, vlan_id)
+                self.logger.info("   ✅ 房间%s VLAN=%s: 剩余%.1fGB", 
+                                    room_number, vlan_id, remaining/(1024**3))
+
     
-    def _installDevicePermitFlows(self, datapath, device_mac):
-        """为指定设备安装配额许可流表 - 仅IP流量，ICMP包含在IP中"""
+    def _installVlanPermitFlows(self, datapath, vlan_id):
+        """为指定VLAN安装许可流表 - 双向允许IPv4通信"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        
-        device_port = self._getDevicePort(device_mac)
         router_port = 1  # 路由器固定端口
         
         # 优先级层次（从高到低）：
@@ -99,28 +94,26 @@ class FlowManager:
         # 1:   ARP（基础流表已处理）
         # 0:   table-miss drop（基础流表已处理）
         # 10:  通用ARP许可（基础流表已处理）
-        match_anyarp = parser.OFPMatch(eth_type=0x0806)
-        actions_anyarp = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
-        self.addFlow(datapath, 10, match_anyarp, actions_anyarp)
-
         # 400: 设备到路由器的IP（包含ICMP，配额许可）
         match_h_r = parser.OFPMatch(
-            eth_src=device_mac, 
-            eth_dst=self.router_mac, 
-            eth_type=0x0800  # IPv4（包含ICMP、TCP、UDP等）
+            vlan_vid=(0x1000 | vlan_id),  # VLAN匹配必须加0x1000
+            eth_type=0x0800
         )
         actions_h_r = [parser.OFPActionOutput(router_port)]
         self.addFlow(datapath, 400, match_h_r, actions_h_r)
 
         # 400: 路由器到设备的IP（包含ICMP，配额许可）
         match_r_h = parser.OFPMatch(
+            vlan_vid=(0x1000 | vlan_id),
             eth_src=self.router_mac,
-            eth_dst=device_mac,
-            eth_type=0x0800  # IPv4（包含ICMP、TCP、UDP等）
+            eth_type=0x0800
         )
-        actions_r_h = [parser.OFPActionOutput(device_port)]
+        actions_r_h = [parser.OFPActionOutput(ofproto.OFPP_FLOOD)]
         self.addFlow(datapath, 400, match_r_h, actions_r_h)
-        self.logger.info("🔄 安装设备许可流表: 设备=%s, 端口=%d", device_mac, device_port)
+
+        self.logger.info("🔄 安装VLAN许可流表: VLAN=%s", vlan_id)
+    
+    
     def _clearQuotaFlows(self, datapath):
         """清除所有配额相关流表（保留基础流表）"""
         ofproto = datapath.ofproto
@@ -192,7 +185,7 @@ class FlowManager:
         datapath.send_msg(mod)
         self.logger.info("🗑️  删除流表: 优先级=%d, 匹配=%s", priority, match)
     
-    def _getDevicePort(self, device_mac):
+    def _getDevicePort(self, device_mac):#这个没有用上
         """根据MAC地址返回对应的端口"""
         port_mapping = {
             "00:00:00:00:00:01": 2,  # h1 -> s1-eth2
