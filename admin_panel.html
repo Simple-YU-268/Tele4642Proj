@@ -165,7 +165,6 @@
                             <th>Phone Last 4</th>
                             <th>Data Quota (GB)</th>
                             <th>Used Traffic (GB)</th>
-                            <th>Devices</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -304,7 +303,6 @@
                         <td>${phone}</td>
                         <td>${((user.quota || 0) / (1024**3)).toFixed(2)}</td>
                         <td>${((user.used_traffic || 0) / (1024**3)).toFixed(2)} </td>
-                        <td>${(user.devices || []).length}</td>
                         <td>
                             <button class="btn danger" onclick="deleteRoom('${room}')">Delete</button>
                         </td>
@@ -330,7 +328,7 @@
                             <td>${room}</td>
                             <td>${phone}</td>
                             <td>${((user.quota || 0) / (1024**3)).toFixed(2)}</td>
-                            <td>${(user.devices || []).length}</td>
+                            <td>${((user.used_traffic || 0) / (1024**3)).toFixed(2)} </td>
                             <td>
                                 <button class="btn danger" onclick="deleteRoom('${room}')">Delete</button>
                             </td>

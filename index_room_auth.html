@@ -77,6 +77,17 @@
         }
         .error { color: #e74c3c; margin-bottom: 15px; }
         .success { color: #27ae60; margin-bottom: 15px; }
+
+
+
+#custom-plan-input:focus {
+    outline: none;
+    border: 2px solid #FFC72C;   /* 黄色边框 */
+    box-shadow: 0 0 5px #FFC72C; /* 黄色发光效果 */
+}
+
+
+
     </style>
 </head>
 <body>
@@ -116,20 +127,24 @@
             <div class="step" id="plan-step">
                 <h3>Select Data Plan</h3>
                 <p>Room: <span id="current-room"></span></p>
-                <p>Current Data: <span id="current-quota">0 GB</span></p>
+                <p>Remaining Data: <span id="current-quota">0 GB</span></p>
                 
                 <div id="plans">
-                    <div class="plan-card" onclick="selectPlan('0GB')">
-                        <strong>Free</strong> - 0GB - $0
+                    <div class="plan-card" id="custom-plan-card" onclick="selectCustomPlan(event)">
+                        <strong>Custom:</strong> 
+                        <input type="number" id="custom-plan-input" min="0" placeholder="Enter GB" 
+                                                        disabled style="width:80px; padding:5px;" onclick="event.stopPropagation();">
+                        <span>GB</span> -
+                        <span id="custom-price" style="margin-left:auto;">$0</span>
+</div>
+                    <div class="plan-card" onclick="selectPlan('5G')">
+                        <strong>5GB</strong> - $2.5
                     </div>
                     <div class="plan-card" onclick="selectPlan('10G')">
-                        <strong>10GB</strong> - $5
+                        <strong>10GB</strong> - $4
                     </div>
-                    <div class="plan-card" onclick="selectPlan('30G')">
-                        <strong>30GB</strong> - $12
-                    </div>
-                    <div class="plan-card" onclick="selectPlan('50G')">
-                        <strong>50GB</strong> - $18
+                    <div class="plan-card" onclick="selectPlan('20G')">
+                        <strong>20GB</strong> - $7
                     </div>
                 </div>
                 
@@ -150,7 +165,7 @@
                     <input type="text" id="cvv" placeholder="CVV" maxlength="3">
                 </div>
                 
-                <button class="btn" onclick="processPayment()">Pay Now</button>
+                <button class="btn" style="margin-top:15px;" onclick="processPayment()">Pay Now</button>
             </div>
 
             <!-- Device Connection -->
@@ -206,6 +221,21 @@
         function showStep(step) {
             document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
             document.getElementById(step).classList.add('active');
+        // ✅ 如果进入Plan Step，重置按钮状态
+    if (step === 'plan-step') {
+        document.getElementById('plan-btn').disabled = true;
+
+        // 清除自定义按钮状态，防止上一次选择遗留
+        document.querySelectorAll('.plan-card').forEach(c => {
+            c.classList.remove('selected');
+            if (c.querySelector('input')) {
+                c.querySelector('input').value = '';
+                c.querySelector('input').disabled = true;
+            }
+        });
+        selectedPlan = ''; // 重置已选套餐
+    }
+        
         }
 
         function formatBytes(bytes) {
@@ -273,32 +303,106 @@
             
             if (data.status === 'success') {
                 currentRoom = roomNumber;
+
+            // 计算剩余流量
+                const quota = data.quota || 0;
+                const used = data.used_traffic || 0;
+                const remaining = Math.max(quota - used, 0);
+
                 document.getElementById('current-room').textContent = roomNumber;
-                document.getElementById('current-quota').textContent = formatBytes(data.quota);
+                document.getElementById('current-quota').textContent = formatBytes(remaining);
                 showStep('plan-step');
-            } else {
+            }else {
                 alert('Invalid room number or phone last 4 digits');
             }
         }
 
-        function selectPlan(plan) {
-            selectedPlan = plan;
-            document.querySelectorAll('.plan-card').forEach(c => c.classList.remove('selected'));
-            event.target.classList.add('selected');
-            document.getElementById('plan-btn').disabled = false;
-            
-            const prices = {'0GB': 0, '10G': 5, '30G': 12, '50G': 18};
-            document.getElementById('selected-plan-text').textContent = plan;
-            document.getElementById('selected-price').textContent = prices[plan];
-        }
+
+function calculatePrice(gb) {
+    let price = gb * 0.5;       // 基础价格
+    if (gb >= 20) price *= 0.7; // 20G及以上 7折
+    else if (gb >= 10) price *= 0.8; // 10G及以上 8折
+    return price;
+}
+
+function selectCustomPlan(e) {
+    e.stopPropagation();
+    document.querySelectorAll('.plan-card').forEach(c => {
+        c.classList.remove('selected');
+        if (c.querySelector('input')) c.querySelector('input').disabled = true;
+    });
+
+    const card = document.getElementById('custom-plan-card');
+    card.classList.add('selected');
+    
+    const inputField = document.getElementById('custom-plan-input');
+    inputField.disabled = false;
+    inputField.focus();   // ✅ 自动聚焦，立即可输入
+
+    let gbValue = parseFloat(inputField.value || '0');
+    selectedPlan = gbValue > 0 ? gbValue + 'G' : '0G';
+
+    let price = calculatePrice(gbValue);
+    document.getElementById('custom-price').textContent = `$${price.toFixed(2)}`;
+    document.getElementById('selected-plan-text').textContent = gbValue + 'GB';
+    document.getElementById('selected-price').textContent = price.toFixed(2);
+    document.getElementById('plan-btn').disabled = false;
+}
+
+
+function selectPlan(plan) {
+    selectedPlan = plan;
+    document.querySelectorAll('.plan-card').forEach(c => {
+        c.classList.remove('selected');
+        if (c.querySelector('input')) c.querySelector('input').disabled = true;
+    });
+    event.currentTarget.classList.add('selected');
+    document.getElementById('plan-btn').disabled = false;
+
+    let gbValue = parseInt(plan.replace('G', ''));
+    let price = calculatePrice(gbValue);
+    document.getElementById('selected-plan-text').textContent = gbValue + 'GB';
+    document.getElementById('selected-price').textContent = price.toFixed(2);
+}
+
+// 自定义输入时实时计算价格
+document.getElementById('custom-plan-input').addEventListener('input', function() {
+    if (document.getElementById('custom-plan-card').classList.contains('selected')) {
+        let gbValue = parseFloat(this.value || '0');
+        selectedPlan = gbValue > 0 ? gbValue + 'G' : '0G';
+
+        let price = calculatePrice(gbValue);
+        document.getElementById('custom-price').textContent = `$${price.toFixed(2)}`;
+        document.getElementById('selected-plan-text').textContent = gbValue + 'GB';
+        document.getElementById('selected-price').textContent = price.toFixed(2);
+        document.getElementById('plan-btn').disabled = gbValue < 0;
+    }
+});
 
         async function confirmPlan() {
-            if (selectedPlan === '0GB') {
-                connectDevice();   // 直接连接
-            } else {
-                showStep('payment-step');
-            }
+            if (document.getElementById('custom-plan-card').classList.contains('selected')) {
+        let value = document.getElementById('custom-plan-input').value.trim();
+        let gbValue = value === '' ? 0 : parseFloat(value);
+        
+        if (gbValue < 0) {
+            alert('Please enter a valid non-negative number');
+            return;
         }
+
+        if (gbValue === 0) {
+            selectedPlan = '0GB';  // ✅ 沿用Free逻辑
+        } else {
+            selectedPlan = gbValue + 'G';
+        }
+    }
+
+    if (selectedPlan === '0GB') {
+        connectDevice();// 直接连接
+    } else {
+        showStep('payment-step');
+    }
+}
+   
 
         async function processPayment() {
 
@@ -364,7 +468,10 @@
              const data = await res.json();
 
              if (data.status === 'success') {
-                 document.getElementById('final-quota').textContent = formatBytes(data.quota);
+                 const quota = data.quota || 0;
+    const used = data.used_traffic || 0;
+    const remaining = Math.max(quota - used, 0);
+    document.getElementById('final-quota').textContent = formatBytes(remaining);
                  showStep('success-step');
             } else {
               alert('Failed to connect device');

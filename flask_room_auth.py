@@ -109,6 +109,7 @@ def room_login():
                 'status': 'success',
                 'room_number': room_number,
                 'quota': user_data['users'][room_number]['quota'],
+                'used_traffic': user_data['users'][room_number].get('used_traffic', 0),
                 'devices': user_data['users'][room_number]['devices']
             })
         else:
@@ -129,27 +130,40 @@ def select_room_plan():
             
         plans = {
             '0GB': 0,
-            '10G': 10 * 1024 * 1024 * 1024,
-            '30G': 30 * 1024 * 1024 * 1024,
-            '50G': 50 * 1024 * 1024 * 1024,
+            '5G': 5 * 1024**3,
+            '10G': 10 * 1024**3,
+            '20G': 20 * 1024**3,
         }
         
+        user_data = load_user_data()
+        quota_bytes = 0
+
         if plan in plans:
-            user_data = load_user_data()
-            if room_number in user_data['users']:
-                if plan != '0GB':
-                    # 累加新购流量到现有配额
-                    current_quota = user_data['users'][room_number]['quota']
-                    new_quota = current_quota + plans[plan]
-                    user_data['users'][room_number]['quota'] = new_quota
-                    save_user_data(user_data)
-                    return jsonify({'status': 'success', 'plan': plan, 'quota': new_quota})
-                else:
-                    # 0GB套餐不改变配额
-                    save_user_data(user_data)
-                    return jsonify({'status': 'success', 'plan': plan, 'quota': user_data['users'][room_number]['quota']})
-        
-        return jsonify({'status': 'failure', 'message': 'Invalid plan'}), 400
+            quota_bytes = plans[plan]
+        else:
+            if plan.endswith('G'):
+                try:
+                    gb_value = float(plan[:-1])
+                    quota_bytes = gb_value * 1024**3
+                except:
+                    return jsonify({'status': 'failure', 'message': 'Invalid custom plan format'}), 400
+            else:
+                return jsonify({'status': 'failure', 'message': 'Invalid plan'}), 400
+
+        if room_number in user_data['users']:
+            if quota_bytes > 0:
+                current_quota = user_data['users'][room_number].get('quota', 0)
+                new_quota = current_quota + quota_bytes
+                user_data['users'][room_number]['quota'] = new_quota
+            else:
+                # 0GB套餐不改变配额
+                new_quota = user_data['users'][room_number].get('quota', 0)
+
+            save_user_data(user_data)
+            return jsonify({'status': 'success', 'plan': plan, 'quota': new_quota})
+
+        return jsonify({'status': 'failure', 'message': 'Room not found'}), 400
+
     except Exception as e:
         return jsonify({'status': 'failure', 'message': str(e)}), 500
 
@@ -205,8 +219,9 @@ def connect_room_device():
                 # 成功添加到SDN白名单
                 save_user_data(user_data)
                 return jsonify({
-                    'status': 'success', 
+                    'status': 'success',
                     'quota': user_data['users'][room_number]['quota'],
+                    'used_traffic': user_data['users'][room_number].get('used_traffic', 0),
                     'message': 'Device successfully connected to network'
                 })
             elif response.status_code == 409:
@@ -215,6 +230,7 @@ def connect_room_device():
                 return jsonify({
                     'status': 'success', 
                     'quota': user_data['users'][room_number]['quota'],
+                    'used_traffic': user_data['users'][room_number].get('used_traffic', 0),
                     'message': 'Device already authorized, extending existing connection'
                 })
             else:
@@ -223,6 +239,7 @@ def connect_room_device():
                 return jsonify({
                     'status': 'success', 
                     'quota': user_data['users'][room_number]['quota'],
+                    'used_traffic': user_data['users'][room_number].get('used_traffic', 0),
                     'message': 'Device registered locally, network access configured'
                 })
         except requests.exceptions.RequestException:
@@ -231,6 +248,7 @@ def connect_room_device():
             return jsonify({
                 'status': 'success', 
                 'quota': user_data['users'][room_number]['quota'],
+                'used_traffic': user_data['users'][room_number].get('used_traffic', 0),
                 'message': 'Device connected via local registry, network access available'
             })
         except Exception as e:
@@ -239,6 +257,7 @@ def connect_room_device():
             return jsonify({
                 'status': 'success', 
                 'quota': user_data['users'][room_number]['quota'],
+                'used_traffic': user_data['users'][room_number].get('used_traffic', 0),
                 'message': f'Device registered successfully: {str(e)}'
             })
     except Exception as e:
