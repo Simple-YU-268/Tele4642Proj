@@ -1,1 +1,1 @@
-"""酒店WiFi控制器模块包"""
+"""Hotel WiFi controller module package"""
