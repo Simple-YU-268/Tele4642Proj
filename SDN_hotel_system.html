@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Hotel Internet Access System - SDN Solution</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #e2e8f0;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        /* Main Menu Styles */
+        .main-menu {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+        }
+        
+        .menu-button {
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 30px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+        
+        .menu-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+        }
+        
+        .menu-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: -1;
+        }
+        
+        .menu-button:hover::before {
+            opacity: 1;
+        }
+        
+        .menu-button span {
+            margin-right: 8px;
+        }
+        
+        .menu-content {
+            position: absolute;
+            top: 60px;
+            left: 0;
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border-radius: 15px;
+            padding: 20px;
+            width: 300px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            opacity: 0;
+            transform: translateY(-20px);
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .main-menu:hover .menu-content {
+            opacity: 1;
+            transform: translateY(0);
+            visibility: visible;
+        }
+        
+        .menu-title {
+            color: #3b82f6;
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #334155;
+            text-align: center;
+            animation: titlePulse 2s ease-in-out infinite;
+        }
+        
+        .menu-item {
+            padding: 12px 15px;
+            margin: 8px 0;
+            background: rgba(30, 41, 59, 0.7);
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            border-left: 3px solid transparent;
+            cursor: pointer;
+        }
+        
+        .menu-item:hover {
+            background: rgba(59, 130, 246, 0.2);
+            border-left: 3px solid #3b82f6;
+            transform: translateX(5px);
+        }
+        
+        .menu-item h3 {
+            color: #f1f5f9;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+        
+        .menu-item p {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        .team-members {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #334155;
+        }
+        
+        .team-member {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px dashed #334155;
+        }
+        
+        .team-member:last-child {
+            border-bottom: none;
+        }
+        
+        .team-member-name {
+            color: #cbd5e1;
+            font-size: 0.9rem;
+            flex: 1;
+        }
+        
+        .team-member-id {
+            color: #94a3b8;
+            font-size: 0.8rem;
+            background: rgba(15, 23, 42, 0.5);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        /* Page Content Styles */
+        .page-content {
+            display: none;
+        }
+        
+        .page-content.active {
+            display: block;
+        }
+        
+        /* Team Page Styles */
+        .team-page {
+            padding: 40px;
+        }
+        
+        .team-section {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+        
+        .team-section h2 {
+            color: #3b82f6;
+            font-size: 2rem;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #334155;
+            padding-bottom: 10px;
+        }
+        
+        .team-info {
+            margin-bottom: 30px;
+        }
+        
+        .team-info h3 {
+            color: #f1f5f9;
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+        }
+        
+        .team-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .team-card {
+            background: linear-gradient(145deg, #1f2937, #111827);
+            border-radius: 15px;
+            padding: 25px;
+            border-left: 4px solid #3b82f6;
+            transition: all 0.3s ease;
+        }
+        
+        .team-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .team-card h4 {
+            color: #f1f5f9;
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+        }
+        
+        .team-card p {
+            color: #94a3b8;
+            font-size: 0.9rem;
+        }
+        
+        .back-button {
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 30px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .back-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4);
+        }
+        
+        /* Tech Grid Background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(59, 130, 246, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: -1;
+            animation: gridMove 20s linear infinite;
+        }
+        
+        @keyframes gridMove {
+            0% { transform: translate(0, 0); }
+            100% { transform: translate(50px, 50px); }
+        }
+        
+        /* Floating particles */
+        .particles {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+        }
+        
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: #3b82f6;
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+            opacity: 0.6;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); opacity: 0.6; }
+            50% { transform: translateY(-20px) rotate(180deg); opacity: 1; }
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 50px;
+            padding: 60px 0;
+            position: relative;
+        }
+        
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+            animation: scanLine 2s ease-in-out infinite;
+        }
+        
+        @keyframes scanLine {
+            0%, 100% { width: 200px; opacity: 0; }
+            50% { width: 600px; opacity: 1; }
+        }
+        
+        .header h1 {
+            font-size: 3.5rem;
+            margin-bottom: 25px;
+            text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+            animation: titleGlow 3s ease-in-out infinite alternate;
+            background: linear-gradient(45deg, #ffffff, #3b82f6, #ffffff);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: titleShimmer 4s ease-in-out infinite;
+        }
+        
+        @keyframes titleShimmer {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        .header .subtitle {
+            font-size: 1.5rem;
+            opacity: 0.9;
+            font-weight: 300;
+            color: #94a3b8;
+            animation: fadeInUp 1s ease-out 0.5s both;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 0.9;
+                transform: translateY(0);
+            }
+        }
+        
+        .content-card {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 40px;
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+            animation: slideInUp 0.8s ease-out both;
+        }
+        
+        .content-card:nth-child(even) {
+            animation-delay: 0.2s;
+        }
+        
+        .content-card:nth-child(odd) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .content-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.1), transparent);
+            transition: left 0.8s ease;
+        }
+        
+        .content-card:hover::before {
+            left: 100%;
+        }
+        
+        .content-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 
+                0 30px 60px rgba(0, 0, 0, 0.4),
+                0 0 30px rgba(59, 130, 246, 0.3),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            border-color: rgba(59, 130, 246, 0.5);
+        }
+        
+        .section-title {
+            color: #3b82f6;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #334155;
+            padding-bottom: 20px;
+            position: relative;
+            animation: titlePulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes titlePulse {
+            0%, 100% { text-shadow: 0 0 5px rgba(59, 130, 246, 0.3); }
+            50% { text-shadow: 0 0 20px rgba(59, 130, 246, 0.6); }
+        }
+        
+        .section-title::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            animation: lineGrow 2s ease-out 1s both;
+        }
+        
+        @keyframes lineGrow {
+            to { width: 100px; }
+        }
+        
+        .intro-text {
+            font-size: 1.1rem;
+            color: #cbd5e1;
+            margin-bottom: 25px;
+            text-align: justify;
+            line-height: 1.8;
+        }
+        
+        .highlight-box {
+            background: linear-gradient(135deg, #1e40af 0%, #0ea5e9 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin: 25px 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            animation: pulseGlow 3s ease-in-out infinite;
+        }
+        
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(59, 130, 246, 0.6); }
+        }
+        
+        .highlight-box::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            animation: rotate 3s linear infinite;
+        }
+        
+        @keyframes rotate {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .highlight-box h3 {
+            font-size: 1.8rem;
+            margin-bottom: 15px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .highlight-box p {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 25px;
+            margin: 40px 0;
+        }
+        
+        .benefit-item {
+            background: linear-gradient(145deg, #374151, #1f2937);
+            padding: 25px;
+            border-radius: 15px;
+            border-left: 4px solid #3b82f6;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .benefit-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, rgba(59, 130, 246, 0.1), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .benefit-item:hover::before {
+            opacity: 1;
+        }
+        
+        .benefit-item:hover {
+            transform: translateY(-5px) scale(1.02);
+            border-left-color: #06b6d4;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+        }
+        
+        .benefit-item h4 {
+            color: #f1f5f9;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .benefit-item p {
+            color: #cbd5e1;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .workflow-steps {
+            margin: 40px 0;
+        }
+        
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 35px;
+            padding: 30px;
+            background: linear-gradient(145deg, #1f2937, #111827);
+            border-radius: 15px;
+            transition: all 0.4s ease;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .step::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, rgba(59, 130, 246, 0.05), transparent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .step:hover::before {
+            opacity: 1;
+        }
+        
+        .step:hover {
+            transform: translateX(10px) scale(1.02);
+            border-color: rgba(59, 130, 246, 0.5);
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.3),
+                0 0 30px rgba(59, 130, 246, 0.2);
+        }
+        
+        .step-number {
+            background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-right: 25px;
+            flex-shrink: 0;
+            position: relative;
+            z-index: 1;
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
+            animation: numberPulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes numberPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .step-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .step-content h4 {
+            color: #f1f5f9;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+        
+        .step-content p {
+            color: #cbd5e1;
+            line-height: 1.7;
+        }
+        
+        .tech-highlight {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #3b82f6 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 20px;
+            margin: 40px 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        
+        .tech-highlight::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+            animation: rotateGlow 4s linear infinite;
+        }
+        
+        @keyframes rotateGlow {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .tech-highlight h3 {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+            text-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+        
+        .tech-highlight p {
+            position: relative;
+            z-index: 1;
+            font-size: 1.1rem;
+        }
+        
+        .footer {
+            text-align: center;
+            color: #94a3b8;
+            margin-top: 50px;
+            padding: 30px 0;
+            border-top: 1px solid #334155;
+            animation: fadeIn 1s ease-out 2s both;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        /* Data Flow Animation */
+        .data-flow {
+            position: absolute;
+            top: 50%;
+            right: 20px;
+            width: 100px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+            animation: dataFlow 2s ease-in-out infinite;
+        }
+        
+        @keyframes dataFlow {
+            0%, 100% { transform: translateX(-100px); opacity: 0; }
+            50% { transform: translateX(0); opacity: 1; }
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5rem;
+            }
+            
+            .header .subtitle {
+                font-size: 1.2rem;
+            }
+            
+            .content-card {
+                padding: 25px;
+            }
+            
+            .section-title {
+                font-size: 2rem;
+            }
+            
+            .step {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .step-number {
+                margin: 0 auto 20px auto;
+            }
+            
+            .benefits-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .main-menu {
+                top: 10px;
+                left: 10px;
+            }
+            
+            .menu-content {
+                width: 280px;
+            }
+            
+            .team-page {
+                padding: 20px;
+            }
+            
+            .team-section {
+                padding: 25px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Main Menu -->
+    <div class="main-menu">
+        <button class="menu-button">
+            <span>☰</span> Menu
+        </button>
+        <div class="menu-content">
+            <div class="menu-title">Hotel Wi-Fi Controller</div>
+            
+            <div class="menu-item" onclick="showPage('team-info')">
+                <h3>Home</h3>
+                <p>Meet our team members</p>
+            </div>
+            
+            <div class="menu-item" onclick="showPage('project-info')">
+                <h3>Technical Background</h3>
+                <p>View the technical details</p>
+            </div>
+            
+            <div class="menu-item" onclick="showPage('system-diagram')">
+                <h3>System Diagram</h3>
+                <p>Core functions and architecture</p>
+            </div>
+            
+            <div class="menu-item" onclick="showPage('implement')">
+                <h3>Implementation</h3>
+                <p>Deployment and demonstration</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Team Info Page (Home Page) -->
+    <div id="team-info" class="page-content active">
+        <div class="container">
+            <div class="team-page">
+                <div class="header">
+                    <h1>Hotel Internet Service Based on SDN</h1>
+                    <h1>Tele4642 Project</h1>
+                    <div class="subtitle">Our code on Github: https://github.com/Simple-YU-268/Tele4642Proj</div>
+                </div>
+
+                <div class="team-members">
+                    <h3>Team Members</h3>
+                    
+                    <div class="team-grid">
+                        <div class="team-card">
+                            <h4>Xinpeng Yu</h4>
+                            <p>Student ID: z5615351</p>
+                        </div>
+                        
+                        <div class="team-card">
+                            <h4>Chongyi Li</h4>
+                            <p>Student ID: z5580283</p>
+                        </div>
+                        
+                        <div class="team-card">
+                            <h4>Qianyu Xu</h4>
+                            <p>Student ID: z5617161</p>
+                        </div>
+                        
+                        <div class="team-card">
+                            <h4>Tingxu Huang</h4>
+                            <p>Student ID: z5597503</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer">
+                <p>Smart Hotel Internet Access System - Meet Our Team</p>
+                <button class="back-button" onclick="showPage('project-info')">Next: Technical Background</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Info Page (Technical Background) -->
+    <div id="project-info" class="page-content">
+        <div class="particles">
+            <div class="particle" style="left: 10%; top: 20%; animation-delay: 0s;"></div>
+            <div class="particle" style="left: 20%; top: 80%; animation-delay: 1s;"></div>
+            <div class="particle" style="left: 30%; top: 40%; animation-delay: 2s;"></div>
+            <div class="particle" style="left: 40%; top: 60%; animation-delay: 3s;"></div>
+            <div class="particle" style="left: 50%; top: 30%; animation-delay: 4s;"></div>
+            <div class="particle" style="left: 60%; top: 70%; animation-delay: 5s;"></div>
+            <div class="particle" style="left: 70%; top: 50%; animation-delay: 0.5s;"></div>
+            <div class="particle" style="left: 80%; top: 20%; animation-delay: 1.5s;"></div>
+            <div class="particle" style="left: 90%; top: 90%; animation-delay: 2.5s;"></div>
+        </div>
+
+        <div class="container">
+            <div class="header">
+                <h1>Technical Background</h1>
+                <div class="subtitle">Powered by Software Defined Networking (SDN)</div>
+            </div>
+            
+            <div class="content-card">
+                <h2 class="section-title">Hotel Wi-Fi connection issues nowadays</h2>
+                <div class="intro-text">
+                    You won't feel surprised when you successfully make network connection in a hotel room. However, for network developers, managing this service—especially with complex customer needs—can be challenging. Guests may require multi devices connection, temporary access, price-based quotas, or premium services. Traditional networking methods struggle to support such flexible, per-user control without complex and costly infrastructure.
+                </div>
+                <div style="text-align: center; margin: 20px 0;">
+                    <img src="https://i.imgur.com/18o3gy1.png" 
+                         alt="System Architecture Diagram"
+                         style="max-width: 100%; height: auto; border: 1px solid #ccc; border-radius: 8px;">
+                    <p style="font-size: 0.9em; color: #555;">Figure: Many devices need hotel network connection</p>
+                </div>
+                
+                <div class="highlight-box">
+                    <h3>Our Solution</h3>
+                    <p>We implement a smart hotel internet access system using Software Defined Networking (SDN). This approach provides programmable control over the network, enabling dynamic traffic management, real-time quota enforcement, and seamless user interaction through a web-based portal.</p>
+                </div>
+            </div>
+            
+            <div class="content-card">
+                <h2 class="section-title">Why SDN?</h2>
+                <div class="intro-text">
+                    Software Defined Networking (SDN) decouples the control plane (decision-making) from the data plane (traffic forwarding). This allows the entire network to be centrally managed by a controller, which can dynamically install and modify flow rules on SDN-compatible switches.
+                </div>
+                
+                <div class="benefits-grid">
+                    <div class="benefit-item">
+                        <h4>Dynamic Access Control</h4>
+                        <p>Dynamically grant or revoke Internet access based on payment status</p>
+                    </div>
+                    <div class="benefit-item">
+                        <h4>Flexibility and Programmability</h4>
+                        <p>SDN controllers allow developers to write custom logic to support hotel-specific business rules</p>
+                    </div>
+                    <div class="benefit-item">
+                        <h4>Better Visibility and Analytics</h4>
+                        <p>SDN facilitates granular monitoring of per-user traffic flows, provides hotel administrators with detailed usage statistics</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="content-card">
+                <h2 class="section-title">System Workflow Overview</h2>
+                <div class="intro-text">
+                    The hotel Internet service operates with a feedback loop between the user, portal server, and SDN controller. The system ensures seamless and secure access control through the following steps:
+                </div>
+                
+                <div class="workflow-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h4>User Connection</h4>
+                            <p>When a guest has the need to buy quota, he/she will visit the hotel portal for authentication(using 4-last phone number) and service selection.</p>
+                        </div>
+                        <div class="data-flow"></div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h4>Portal Interaction & Quota Selection</h4>
+                            <p>The guest selects a volume-based access package on the portal. Upon successful online payment, the portal sends the session details (user MAC, room number, chosen quota) to the controller.</p>
+                        </div>
+                        <div class="data-flow"></div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h4>Flow Rule Allocation</h4>
+                            <p>The SDN controller installs flow entries on the switch to allow Internet access for that specific user. It also begins quota tracking—monitoring packet counts via OpenFlow statistics.</p>
+                        </div>
+                        <div class="data-flow"></div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                            <h4>Real-Time Monitoring & Enforcement</h4>
+                            <p>As the user consumes quota, the controller checks against the allocated quota. Once the limit is reached, the controller revokes access by deleting or modifying the flow rules automatically.</p>
+                        </div>
+                        <div class="data-flow"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="tech-highlight">
+                <h3>Advanced Network Management</h3>
+                <p>Our SDN-based solution provides unprecedented control and flexibility in hotel network management, ensuring optimal user experience while maintaining security and resource efficiency.</p>
+            </div>
+            
+            <div class="footer">
+                <p>Smart Hotel Internet Access System - Revolutionizing Guest Connectivity</p>
+                <button class="back-button" onclick="showPage('team-info')">Back to Home</button>
+                <button class="back-button" onclick="showPage('system-diagram')">Next: System Architecture</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Diagram Page -->
+    <div id="system-diagram" class="page-content">
+        <div class="particles">
+            <div class="particle" style="left: 10%; top: 20%; animation-delay: 0s;"></div>
+            <div class="particle" style="left: 20%; top: 80%; animation-delay: 1s;"></div>
+            <div class="particle" style="left: 30%; top: 40%; animation-delay: 2s;"></div>
+            <div class="particle" style="left: 40%; top: 60%; animation-delay: 3s;"></div>
+            <div class="particle" style="left: 50%; top: 30%; animation-delay: 4s;"></div>
+            <div class="particle" style="left: 60%; top: 70%; animation-delay: 5s;"></div>
+            <div class="particle" style="left: 70%; top: 50%; animation-delay: 0.5s;"></div>
+            <div class="particle" style="left: 80%; top: 20%; animation-delay: 1.5s;"></div>
+            <div class="particle" style="left: 90%; top: 90%; animation-delay: 2.5s;"></div>
+        </div>
+
+        <div class="container">
+            <div class="header">
+                <h1>System Architecture</h1>
+                <div class="subtitle">Overview of the SDN-based Hotel Internet Access System</div>
+            </div>
+            
+            <div style="text-align: center; margin: 20px 0;">
+                <img src="https://i.imgur.com/PA1wICX.png" 
+                     alt="System Architecture Diagram"
+                     style="max-width: 100%; height: auto; border: 1px solid #ccc; border-radius: 8px;">
+                <p style="font-size: 0.9em; color: #555;">Figure: Our project system block diagram</p>
+            </div>
+
+            <div class="content-card">
+                <h2 class="section-title">System Workflow Overview</h2>
+                <div class="intro-text">
+                    The hotel Internet service operates with a feedback loop between the user, portal server, and SDN controller. The system ensures seamless and secure access control through the following steps:
+                </div>
+                
+                <div class="workflow-steps">
+                    <div class="step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h4>User Connection</h4>
+                            <p>When a guest has the need to buy quota, he/she will visit the hotel portal for authentication(using 4-last phone number) and service selection.</p>
+                        </div>
+                        <div class="data-flow"></div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h4>Portal Interaction & Quota Selection</h4>
+                            <p>The guest selects a volume-based access package on the portal. Upon successful online payment, the portal sends the session details (user MAC, room number, chosen quota) to the controller.</p>
+                        </div>
+                        <div class="data-flow"></div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h4>Flow Rule Allocation</h4>
+                            <p>The SDN controller installs flow entries on the switch to allow Internet access for that specific user. It also begins quota tracking—monitoring packet counts via OpenFlow statistics.</p>
+                        </div>
+                        <div class="data-flow"></div>
+                    </div>
+                    
+                    <div class="step">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                            <h4>Real-Time Monitoring & Enforcement</h4>
+                            <p>As the user consumes quota, the controller checks against the allocated quota. Once the limit is reached, the controller revokes access by deleting or modifying the flow rules automatically.</p>
+                        </div>
+                        <div class="data-flow"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="content-card">
+                <h2 class="section-title">Core Functions</h2>
+                <div class="intro-text">
+                    The system provides comprehensive network management and user control through four core functional modules.
+                </div>
+                
+                <div class="content-card">
+                    <h3 style="color: #3b82f6; font-size: 1.8rem; margin-bottom: 20px;">1. From User Side</h3>
+                    <div class="benefits-grid">
+                        <div class="benefit-item">
+                            <h4>Authentication double-check</h4>
+                            <p>If room number does not match room number, error message will pop out.</p>
+                        </div>
+                        <div class="benefit-item">
+                            <h4>Data Usage Remaining Check</h4>
+                            <p>After selecting and purchasing a data plan, their info is sent from the Flask server to the SDN controller. The controller checks if the user has remaining data quota.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="content-card">
+                    <h3 style="color: #3b82f6; font-size: 1.8rem; margin-bottom: 20px;">2. From Administrator Side</h3>
+                    <div class="benefits-grid">
+                        <div class="benefit-item">
+                            <h4>High Visuability</h4>
+                            <p>Admins can view all user records, including: Room number, MAC address, Purchased & remaining data quota, Current connection status</p>
+                        </div>
+                        <div class="benefit-item">
+                            <h4>Convenient Check-in/out Management</h4>
+                            <p> Admins can manually: delete a user, and add a new user with predefined quota</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="content-card">
+                    <h3 style="color: #3b82f6; font-size: 1.8rem; margin-bottom: 20px;">3. From Controller Side</h3>
+                    <div class="benefits-grid">
+                        <div class="benefit-item">
+                            <h4>Real-time Monitoring</h4>
+                            <p>Controller monitors quota usage every second to avoid excess usage</p>
+                        </div>
+                        <div class="benefit-item">
+                            <h4>Network Access Control</h4>
+                            <p>System verifies their identity and quota before dynamically installing a flow rule, enabling their access to the hotel network</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+                
+        
+            
+            <div class="footer">
+                <p>Smart Hotel Internet Access System - Core Functions Overview</p>
+                <button class="back-button" onclick="showPage('project-info')">Previous: Technical Background</button>
+                <button class="back-button" onclick="showPage('implement')">Next: Implementation</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Implementation Page -->
+    <div id="implement" class="page-content">
+        <div class="particles">
+            <div class="particle" style="left: 10%; top: 20%; animation-delay: 0s;"></div>
+            <div class="particle" style="left: 20%; top: 80%; animation-delay: 1s;"></div>
+            <div class="particle" style="left: 30%; top: 40%; animation-delay: 2s;"></div>
+            <div class="particle" style="left: 40%; top: 60%; animation-delay: 3s;"></div>
+            <div class="particle" style="left: 50%; top: 30%; animation-delay: 4s;"></div>
+            <div class="particle" style="left: 60%; top: 70%; animation-delay: 5s;"></div>
+            <div class="particle" style="left: 70%; top: 50%; animation-delay: 0.5s;"></div>
+            <div class="particle" style="left: 80%; top: 20%; animation-delay: 1.5s;"></div>
+            <div class="particle" style="left: 90%; top: 90%; animation-delay: 2.5s;"></div>
+        </div>
+
+        <div class="container">
+            <div class="header">
+                <h1>Implementation Details</h1>
+                <div class="subtitle">How we built the Smart Hotel Internet Access System</div>
+            </div>
+            
+            <div class="content-card">
+                <h2 class="section-title">Demonstration</h2>
+                <div class="intro-text">
+                    Follow these step-by-step instructions to deploy and test the SDN-based hotel Internet access system.
+                </div>
+                
+                
+                <div class="content-card">
+                    <h3 style="color: #3b82f6; font-size: 1.8rem; margin-bottom: 20px;">1. Run the Code (all in Ubuntu)</h3>
+                    <div class="intro-text">
+                        Execute the system components in the following order:
+                    </div>
+                    <div style="background: #1f2937; padding: 20px; border-radius: 10px; margin: 20px 0; font-family: 'Courier New', monospace; color: #e2e8f0;">
+                        <div style="color: #60a5fa; margin-bottom: 10px;"># Terminal 1: Open SDN Controller</div>
+                        <div>ryu-manager hotel_wifi_controller.py</div>
+                        <br>
+                        <div style="color: #60a5fa; margin-bottom: 10px;"># Terminal 2: Start Server</div>
+                        <div>python3 flask_room_auth.py</div>
+                        <br>
+                        <div style="color: #60a5fa; margin-bottom: 10px;"># Terminal 3: Start Mininet Topology</div>
+                        <div>sudo python3 mininettopo.py</div>
+                    </div>
+                </div>
+
+                
+                <div class="content-card">
+                    <h3 style="color: #3b82f6; font-size: 1.8rem; margin-bottom: 20px;">2. Quota purchasing (all in Ubuntu)</h3>
+                    <div class="intro-text">
+                        Simulate quota payment via index_room_auth.html:
+                    </div>
+                    <div style="background: #1f2937; padding: 20px; border-radius: 10px; margin: 20px 0; font-family: 'Courier New', monospace; color: #e2e8f0;">
+                        <div style="color: #60a5fa; margin-bottom: 10px;"># Open index_room_auth.html</div>
+                        <div>Input your room number and last 4 digits, click ”Access Wifi”.</div>
+                        <div style="text-align: center; margin: 20px 0;">
+                            <img src="https://i.imgur.com/zcH4vJF.png" 
+                                 alt="System Architecture Diagram"
+                                 style="max-width: 100%; height: auto; border: 1px solid #ccc; border-radius: 8px;">
+                        </div>
+                        <div>After input your digital card information successfully, you can connect to wifi with a certain amount of data usage.</div>
+                        <br>
+                    </div>
+                </div>
+
+                <div class="content-card">
+                    <h3 style="color: #3b82f6; font-size: 1.8rem; margin-bottom: 20px;">3. Simulate traffic consumption(all in Ubuntu)</h3>
+                    <div class="intro-text">
+                        Execute the system components in the following order:
+                    </div>
+                    <div style="background: #1f2937; padding: 20px; border-radius: 10px; margin: 20px 0; font-family: 'Courier New', monospace; color: #e2e8f0;">
+                        <div style="color: #60a5fa; margin-bottom: 10px;"># Terminal 3(running Mininet)</div>
+                        <div>h7 iperf -s &</div>
+                        <div>router iperf -c h7 -b 100M -t 30</div>
+                        <div>(h7 means 7-th room in our hotel(room 301), you can change the room number and consumption speed by changing the parameters)</div>
+                        <br>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="content-card">
+                <h2 class="section-title">System Requirements</h2>
+                <div class="intro-text">
+                    Ensure your system meets the following requirements for optimal performance:
+                </div>
+                
+                <div class="benefits-grid">
+                    <div class="benefit-item">
+                        <h4>Operating System</h4>
+                        <p>Ubuntu 18.04 LTS or later (recommended for compatibility)</p>
+                    </div>
+                    <div class="benefit-item">
+                        <h4>Python Version</h4>
+                        <p>Python 3.6 or higher with pip package manager</p>
+                    </div>
+                    <div class="benefit-item">
+                        <h4>Ryu Controller</h4>
+                        <p>Ryu 4.34 or later for SDN controller functionality</p>
+                    </div>
+                    <div class="benefit-item">
+                        <h4>Mininet</h4>
+                        <p>Latest version for network emulation and testing</p>
+                    </div>
+                    <div class="benefit-item">
+                        <h4>Memory</h4>
+                        <p>Minimum 4GB RAM, 8GB recommended for large topologies</p>
+                    </div>
+                    <div class="benefit-item">
+                        <h4>Network Access</h4>
+                        <p>Internet connection for package installation and updates</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer">
+                <p>Smart Hotel Internet Access System - Implementation Complete</p>
+                <button class="back-button" onclick="showPage('system-diagram')">Previous: System Architecture</button>
+                <button class="back-button" onclick="showPage('team-info')">Back to Home</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Function to show the selected page
+        function showPage(pageId) {
+            // Hide all pages
+            document.querySelectorAll('.page-content').forEach(page => {
+                page.classList.remove('active');
+            });
+            
+            // Show the selected page
+            document.getElementById(pageId).classList.add('active');
+            
+            // Scroll to top of the page
+            window.scrollTo(0, 0);
+        }
+    </script>
+</body>
+</html>
