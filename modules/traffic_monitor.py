@@ -1,25 +1,25 @@
-"""流量监控模块 - 基于配额的流量统计，仅使用user_data.json"""
+"""Traffic Monitoring - Quota-based traffic tracking using user_data.json"""
 
 import json
 import os
 import time
-from threading import Lock
+from threading import RLock
 from collections import defaultdict
 
 
 class TrafficMonitor:
-    """设备流量监控器 - 与配额系统集成，流量数据存储在user_data.json中"""
+    """Device traffic monitor - works with quota system and stores data in user_data.json"""
     
 
     def __init__(self, logger, quota_manager):
         self.logger = logger
         self.quotaManager = quota_manager
         self.userDataFile = 'user_data.json'
-        self.lock = Lock()
-        self.lastTimeUsed = self._loadInitialTraffic()  # 程序运行期间不变的变量
+        self.lock = RLock()
+        self.lastTimeUsed = self._loadInitialTraffic() # Cached traffic data loaded at startup
     
     def loadUserData(self):
-        """加载用户数据"""
+        """Load user data from JSON file"""
         try:
             if os.path.exists(self.userDataFile):
                 with open(self.userDataFile, 'r') as f:
@@ -30,7 +30,7 @@ class TrafficMonitor:
             return {"users": {}, "sessions": {}}
 
     def _loadInitialTraffic(self):
-        """程序启动时加载初始流量数据到lastTimeUsed变量（运行期间不变）"""
+        """Load initial traffic data into lastTimeUsed at startup"""
         try:
             user_data = self.loadUserData()
             initial_traffic = {}
@@ -51,83 +51,84 @@ class TrafficMonitor:
             return {}
     
     def accumulateFlowStats(self, datapath):
-        """使用OpenFlow协议读取设备流量统计并累加到lastTimeUsed"""
+        """Send a request(get flow counter) according to the OpenFlow protocol"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         for mac_address in self.lastTimeUsed.keys():
-        # 创建flow stats请求
             match = parser.OFPMatch()
             req = parser.OFPFlowStatsRequest(datapath, 0, ofproto.OFPTT_ALL,
                                         ofproto.OFPP_ANY, ofproto.OFPG_ANY,
                                         0, 0, match)
-            
-            # 发送请求并处理响应
             datapath.send_msg(req)
         
     def accumulatePortStats(self, datapath, port_no):
-        """使用OpenFlow协议读取端口流量统计"""
+        """Send OpenFlow port stats request to the switch"""
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        # 创建port stats请求
         req = parser.OFPPortStatsRequest(datapath, 0, port_no)
         datapath.send_msg(req)
 
     def processFlowStatsReply(self, ev):
-        """处理flow stats响应事件"""
+        """Handle the flow stats reply event"""
         body = ev.msg.body
         self.updateUsedDataFromStats(body)
             
     def processPortStatsReply(self, ev):
-        """处理port stats响应事件"""
+        """Handle the port stats reply event"""
         body = ev.msg.body
-        # 可以在这里处理端口统计信息
         self.logger.debug("Received port stats: %s", body)
 
     def updateUsedDataFromStats(self, flow_stats_response):
-        """根据flow stats响应更新JSON中的used_data"""
-        try:
-            user_data = self.loadUserData()
-            for stat in flow_stats_response:
-                if 'eth_dst' in stat.match:
-                    mac_address = stat.match.get('eth_dst')
-                    packet_count = stat.packet_count
+        """Update used traffic data from flow stats response"""
+        with self.lock:
+            try:
+                user_data = self.loadUserData()
+                for stat in flow_stats_response:
+                    # get src/dst MAC
+                    mac_dst = stat.match.get('eth_dst')
+                    mac_src = stat.match.get('eth_src')
                     byte_count = stat.byte_count
-                    # 累加流量到lastTimeUsed
+                    
                     for room, info in user_data.get('users', {}).items():
                         devices = info.get('devices', [])
-                        if mac_address in devices:
+                        matched_mac = None
+                        if mac_dst in devices:
+                            matched_mac = mac_dst
+                        elif mac_src in devices:
+                            matched_mac = mac_src
+                        if matched_mac:
                             current_traffic = info.get('used_traffic', 0)
-                            #self.logger.info("current_traffic:\n%s", current_traffic)
                             new_traffic = current_traffic + byte_count
-                            self.lastTimeUsed[mac_address]['used_traffic'] = new_traffic   
+                            self.logger.info("byte_count:\n%s\n", byte_count)
+                            self.lastTimeUsed[matched_mac]['used_traffic'] = new_traffic
                             break
-        except Exception as e:
-            self.logger.error("Error updating used_data from stats: %s", str(e))
+            except Exception as e:
+                self.logger.error("Error updating used_data from stats: %s", str(e))
 
     def saveChangedData(self):
-        """根据当前lastTimeUsed中的流量值写入JSON（不再重复叠加）"""
-        try:
-            user_data = self.loadUserData()
-            for mac_address, info in self.lastTimeUsed.items():
-                room_number = info['room']
-                reset_flag = user_data['users'][room_number].get('reset_flag', False)
-                if reset_flag is True:
-                    last_used_traffic = 0
-                    info['used_traffic'] = 0   # 这里同步清零lastTimeUsed里的流量
-                    user_data['users'][room_number]['reset_flag'] = False
-                else:
-                    last_used_traffic = info['used_traffic']
-                if room_number in user_data.get('users', {}):
-                    user_data['users'][room_number]['used_traffic'] = last_used_traffic
-            self.logger.info("user_data:\n%s\n", user_data)
-            self.saveUserData(user_data)
-            self.logger.info("✅ 所有数据保存完毕")
+        """Save current used traffic (from lastTimeUsed) into JSON file"""
+        with self.lock:
+            try:
+                user_data = self.loadUserData()
+                for mac_address, info in self.lastTimeUsed.items():
+                    room_number = info['room']
+                    reset_flag = user_data['users'][room_number].get('reset_flag', False)
+                    if reset_flag is True:
+                        last_used_traffic = 0
+                        info['used_traffic'] = 0   # Also reset traffic in lastTimeUsed
+                        user_data['users'][room_number]['reset_flag'] = False
+                    else:
+                        last_used_traffic = info['used_traffic']
+                    if room_number in user_data.get('users', {}):
+                        user_data['users'][room_number]['used_traffic'] = last_used_traffic
+                self.saveUserData(user_data)
+                self.logger.info("All traffic data saved successfully")
 
-        except Exception as e:
-            self.logger.error("Error Saving used_data from stats: %s", str(e))
+            except Exception as e:
+                self.logger.error("Error Saving used_data from stats: %s", str(e))
 
     def saveUserData(self, data):
-        """保存用户数据"""
+        """Write user data to JSON file (thread-safe)"""
         try:
             with self.lock:
                 with open(self.userDataFile, 'w') as f:

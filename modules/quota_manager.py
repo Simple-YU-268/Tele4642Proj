@@ -1,4 +1,4 @@
-"""配额管理模块 - 基于流量配额的动态控制"""
+"""Quota Management Module - Dynamic control based on traffic quota"""
 
 import json
 import os
@@ -6,7 +6,7 @@ from threading import Lock
 
 
 class QuotaManager:
-    """配额管理器 - 监控用户数据使用情况并动态控制流表"""
+    """Manages user quotas and controls flow rules dynamically"""
     
     def __init__(self, logger, flow_manager):
         self.logger = logger
@@ -16,7 +16,7 @@ class QuotaManager:
         self.lock = Lock()
         
     def loadUserData(self):
-        """加载用户数据"""
+        """Load user data from JSON file"""
         try:
             if os.path.exists(self.userDataFile):
                 with open(self.userDataFile, 'r') as f:
@@ -27,7 +27,7 @@ class QuotaManager:
             return {"users": {}, "sessions": {}}
     
     def saveUserData(self, data):
-        """保存用户数据"""
+        """Save user data to JSON file (thread-safe)"""
         try:
             with self.lock:
                 with open(self.userDataFile, 'w') as f:
@@ -36,7 +36,7 @@ class QuotaManager:
             self.logger.error("Error saving user data: %s", str(e))
     
     def getDevicesWithQuota(self):
-        """获取所有有剩余配额的设备"""
+        """Get all devices that still have remaining quota"""
         user_data = self.loadUserData()
         devices_with_quota = []
         
@@ -57,7 +57,7 @@ class QuotaManager:
         return devices_with_quota
     
     def addQuotaForDevice(self, mac_address, additional_bytes):
-        """为设备增加配额（购买流量）"""
+        """Add quota(buy traffic)"""
         user_data = self.loadUserData()
         
         for room_number, user_info in user_data.get('users', {}).items():
@@ -66,10 +66,10 @@ class QuotaManager:
                 user_info['quota'] = current_quota + additional_bytes
                 
                 self.saveUserData(user_data)
-                self.logger.info("为房间%s设备%s增加配额: +%.1fGB", 
+                self.logger.info("Added quota to room %s, device %s: +%.1fGB", 
                                room_number, mac_address, additional_bytes / (1024**3))
                 
-                # 触发流表更新
+                # Trigger flow table update
                 self._triggerFlowUpdate()
                 return True
         

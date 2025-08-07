@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-酒店WiFi网络控制器 - 基于流量配额的动态流表控制
-模块化版本：默认DROP所有流量，根据配额动态下发许可流表
+Hotel WiFi Network Controller - Dynamic Flow Control Based on Traffic Quota
+Modular Version: Default DROP all traffic, dynamically install flow rules based on quota
 """
 
 from ryu.base import app_manager
@@ -17,10 +17,10 @@ from modules.flow_manager import FlowManager
 from modules.quota_manager import QuotaManager
 from modules.traffic_monitor import TrafficMonitor
 from modules.api_controller import APIController
-
+from threading import Event
 
 class HotelWifiController(app_manager.RyuApp):
-    """主控制器类 - 基于配额的动态流表控制"""
+    """Main Controller Class - Dynamic Flow Control Based on Quota"""
     
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     _CONTEXTS = {'wsgi': WSGIApplication}
@@ -28,12 +28,12 @@ class HotelWifiController(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(HotelWifiController, self).__init__(*args, **kwargs)
         
-        # 初始化模块化组件
+        # Initialize modular components
         self.flowManager = FlowManager(self.logger)
         self.quotaManager = QuotaManager(self.logger, self.flowManager)
         self.trafficMonitor = TrafficMonitor(self.logger, self.quotaManager)
         
-        # 注册API控制器
+        # Register the API controller
         wsgi = kwargs['wsgi']
         wsgi.register(APIController, {
             'quotaManager': self.quotaManager,
@@ -41,45 +41,46 @@ class HotelWifiController(app_manager.RyuApp):
             'controller': self
         })
         
-        # 存储当前连接的交换机
+        # Store currently connected datapaths (switches)
         self.datapaths = {}
-        
-        # 启动周期性流量监控任务
-        self.logger.info("📊 启动周期性流量监控任务...")
+        # Semaphore, indicating the completion of flow statistics
+        self.monitor_done = Event()  
+        # Start periodic traffic monitoring task
+        self.logger.info("Start periodic traffic monitoring task")
         self.threads.append(hub.spawn(self._periodic_traffic_monitor))
 
-         # 启动周期性配额更新任务
-        self.logger.info("🔄 启动周期性配额更新任务...")
+        # Start periodic quota update task
+        self.logger.info("Start periodic quota update task")
         self.threads.append(hub.spawn(self._periodic_quota_update))
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switchFeaturesHandler(self, ev):
-        """交换机连接初始化 - 默认DROP所有流量"""
+        """Initialize switch connect - default: Drop all"""
         datapath = ev.msg.datapath
         
         self.logger.info("=" * 60)
-        self.logger.info("📍 交换机连接初始化: %016x", datapath.id)
+        self.logger.info("Initialize switch: %016x", datapath.id)
         
-        # 安装基础流表 - table-miss + ARP
+        # install basic flow - table-miss + ARP
         self.flowManager.installDefaultFlows(datapath)
-        self.logger.info("🔧 安装基础流表 - table-miss + ARP")
+        self.logger.info("install basic flow - table-miss + ARP")
         
-        # 根据配额下发许可流表
+        # send flow based on quota
         self.flowManager.updateQuotaBasedFlows(datapath, self.quotaManager)
         
-        self.logger.info("✅ 初始化完成 - 默认DROP，配额许可")
+        self.logger.info("initialization completed - default DROP, quota permission")
         self.logger.info("=" * 60)
         
-        # 记录交换机连接
+        # record sw connection
         self.datapaths[datapath.id] = datapath
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def packetInHandler(self, ev):
-        """数据包处理 - 仅记录流量，不处理转发（由预配置流表控制）"""
+        """Data packet process - only record traffic, not handle forwarding"""
         msg = ev.msg
         datapath = msg.datapath
         
-        # 解析数据包
+        # Parsing Data Packets
         pkt = packet.Packet(msg.data)
         eth = pkt.get_protocols(ethernet.ethernet)[0]
         
@@ -88,7 +89,7 @@ class HotelWifiController(app_manager.RyuApp):
         inPort = msg.match['in_port']
         packet_len = len(msg.data)
         
-        # 仅记录数据包信息，不处理转发（由预配置流表控制）
+        # only record traffic
         packet_type = "UNKNOWN"
         
         if eth.ethertype == 0x0806:
@@ -100,78 +101,78 @@ class HotelWifiController(app_manager.RyuApp):
         else:
             packet_type = f"OTHER(0x{eth.ethertype:04x})"
         
-        # 记录数据包信息（不处理转发）
         self.logger.info("=" * 80)
-        self.logger.info("📊 PACKET-IN 监控记录:")
-        self.logger.info("   📍 交换机: %016x", datapath.id)
-        self.logger.info("   🔗 源MAC: %s", srcMac)
-        self.logger.info("   🔗 目的MAC: %s", dstMac)
-        self.logger.info("   🔌 入端口: %d", inPort)
-        self.logger.info("   📏 包长度: %d字节", packet_len)
-        self.logger.info("   🏷️  类型: %s", packet_type)
+        self.logger.info("PACKET-IN monitor record:")
+        self.logger.info("switches: %016x", datapath.id)
+        self.logger.info("src_MAC: %s", srcMac)
+        self.logger.info("dst_MAC: %s", dstMac)
+        self.logger.info("inPort: %d", inPort)
+        self.logger.info("packet_len: %d字节", packet_len)
+        self.logger.info("packet_type: %s", packet_type)
         
-        # 如果是IPv4，显示IP信息
+        # if packet_type is IPv4，show IP information
         if eth.ethertype == 0x0800:
             ip_pkt = pkt.get_protocol(ipv4.ipv4)
             if ip_pkt:
-                self.logger.info("   🌐 源IP: %s", ip_pkt.src)
-                self.logger.info("   🌐 目的IP: %s", ip_pkt.dst)
-                self.logger.info("   🔧 协议: %s", ip_pkt.proto)
+                self.logger.info("ip_pkt.src: %s", ip_pkt.src)
+                self.logger.info("ip_pkt.dst: %s", ip_pkt.dst)
+                self.logger.info("ip_pkt.proto: %s", ip_pkt.proto)
         
-        self.logger.info("🎯 流量已记录 - 由预配置流表控制")
+        self.logger.info("traffic has been recorded")
         self.logger.info("=" * 80)
 
     def _periodic_traffic_monitor(self):
-        """每5秒执行一次流量监控任务 - 读取并写入流量数据"""
+        """traffic_monitor Once per second - request flow/port counter"""
         while True:
-            hub.sleep(1)  # 每1秒执行一次
-            
-            if not self.datapaths:
+            hub.sleep(0.11)  # Once per 0.11 second
+            # if datapaths = {}, Skip the current loop and re-enter the next loop
+            if not self.datapaths:  
                 continue
                 
             self.logger.info("=" * 60)
             self.logger.info("Start periodic traffic monitor")
             
-            # 为每个连接的交换机收集流量统计
+            # Iterate through each dpid to send the request
             for dpid, datapath in self.datapaths.items():
                 try:
                     self.logger.info("request of FlowStats of switch %016x", dpid)
                     self.trafficMonitor.accumulateFlowStats(datapath)
                 except Exception as e:
                     self.logger.error("! Flowrequest failed: %s", str(e))
-                        
+            self.monitor_done.set()  # quota update can continue       
             self.logger.info("Finish periodic traffic monitor")
             self.logger.info("=" * 60)
 
     def _periodic_quota_update(self):
-        """每5秒执行一次配额更新任务"""
+        """quota_update Once per 5s"""
         while True:
-            hub.sleep(5)  # 每5秒执行一次
+            self.monitor_done.wait()  # waiting for monitor
+            hub.sleep(1.71)  # Once per 1.71 seconds
             if not self.datapaths:
                 continue
             self.logger.info("=" * 60)
             self.logger.info("Start periodic quota update")
             self.trafficMonitor.saveChangedData()
             
-            # 为每个连接的交换机更新配额流表
+            # update quota_based_flow based on dpid
             for dpid, datapath in self.datapaths.items():
                 try:
-                    self.logger.info("📍 更新交换机 %016x 的配额流表", dpid)
+                    self.logger.info("update quota_based_flow of sw %016x", dpid)
                     self.flowManager.updateQuotaBasedFlows(datapath, self.quotaManager)
-                    self.logger.info("✅ 交换机 %016x 配额流表更新完成", dpid)
+                    self.logger.info("update flow of sw %016x successful! ", dpid)
                 except Exception as e:
-                    self.logger.error("❌ 更新交换机 %016x 配额流表失败: %s", dpid, str(e))
-            
+                    self.logger.error("update flow of sw %016x faild: %s", dpid, str(e))
+            self.monitor_done.clear()  # clear event，next time should wait again
             self.logger.info("=" * 60)
-            self.logger.info("✅ 周期性配额更新任务完成")
+            self.logger.info("Finish periodic quota update")
             self.logger.info("=" * 60)
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def flowStatsReplyHandler(self, ev):
-        """处理flow stats响应事件"""
+        """process flow stats reply"""
         self.trafficMonitor.processFlowStatsReply(ev)
 
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def portStatsReplyHandler(self, ev):
-        """处理port stats响应事件"""
+        """process port stats reply"""
         self.trafficMonitor.processPortStatsReply(ev)

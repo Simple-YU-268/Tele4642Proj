@@ -1,4 +1,4 @@
-
+"""流表管理器 - 默认DROP，根据配额动态下发许可流表"""
 from ryu.lib.packet import packet, ethernet, ether_types
 from ryu.ofproto import ofproto_v1_3
 from ryu.ofproto.ofproto_v1_3 import OFPP_FLOOD
