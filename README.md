@@ -7,7 +7,7 @@
 
 [![SDN](https://img.shields.io/badge/SDN-Software%20Defined%20Network-blue)](https://en.wikipedia.org/wiki/Software-defined_networking)
 [![OpenFlow](https://img.shields.io/badge/Protocol-OpenFlow-green)](https://www.opennetworking.org/technical-communities/areas-of-work/software-defined-standards/)
-[![Ryu](https://img.shields.io/badge/Controller-Ryu-orange)](https://osrg.github.io/ryu/)
+[![Ryu](https://img.shields.io/badge/Controller-Ryu-orange)](https://ryu-sdn.org/)
 [![Flask](https://img.shields.io/badge/API-Flask-red)](https://flask.palletsprojects.com/)
 [![Mininet](https://img.shields.io/badge/Network-Mininet-purple)](http://mininet.org/)
 
