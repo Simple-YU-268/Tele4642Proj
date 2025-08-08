@@ -8,11 +8,11 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-            background-color: #000000; /* 多余部分填充黑色 */
+            background-color: #000000; 
             background-image: url('background.png');
             background-repeat: no-repeat;
             background-position: center center;
-            background-size: auto; /* 保持原图大小 */
+            background-size: auto; 
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -26,8 +26,8 @@
             width: 100%; max-width: 400px; overflow: hidden;
         }
         .header { 
-            background: #000000;   /* 纯黑背景 */
-            color: #FFC72C;          /* 黄色字体 */
+            background: #000000;   
+            color: #FFC72C;          /* yellow letter */
             padding: 15px 30px; 
             text-align: center;
         }
@@ -39,13 +39,13 @@
         }
         input:focus, select:focus {
              outline: none;
-             border-color: #DA291C; /* 麦当劳红 */
+             border-color: #DA291C; 
              box-shadow: 0 0 3px #DA291C;
             }
         .btn { 
             width: 100%; 
             padding: 12px; 
-            background: #DA291C;   /* 麦当劳红 */
+            background: #DA291C;   
             color: white; 
             border: none; 
             border-radius: 8px; 
@@ -53,7 +53,7 @@
             cursor: pointer; 
             transition: transform 0.2s;}
         .btn:hover { 
-            background: #b71c12;   /* 深一点的红色，悬停效果 */
+            background: #b71c12;   /* hover */
             transform: translateY(-1px); 
         }
         .btn:hover { transform: translateY(-1px); }
@@ -82,8 +82,8 @@
 
 #custom-plan-input:focus {
     outline: none;
-    border: 2px solid #FFC72C;   /* 黄色边框 */
-    box-shadow: 0 0 5px #FFC72C; /* 黄色发光效果 */
+    border: 2px solid #FFC72C;   
+    box-shadow: 0 0 5px #FFC72C; 
 }
 
 
@@ -195,7 +195,7 @@
     </div>
 
     <script>
-        const DEBUG_MODE = false;   // 调试开关(true跳过验证，false需要验证才能进入下一页)
+        const DEBUG_MODE = false;   // DEBUG_MODE(true → skip，false → no skip)
 
 
         let selectedPlan = '';
@@ -221,11 +221,11 @@
         function showStep(step) {
             document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
             document.getElementById(step).classList.add('active');
-        // ✅ 如果进入Plan Step，重置按钮状态
+        // reset btn (click banned)
     if (step === 'plan-step') {
         document.getElementById('plan-btn').disabled = true;
 
-        // 清除自定义按钮状态，防止上一次选择遗留
+        // clean the btn status
         document.querySelectorAll('.plan-card').forEach(c => {
             c.classList.remove('selected');
             if (c.querySelector('input')) {
@@ -233,7 +233,7 @@
                 c.querySelector('input').disabled = true;
             }
         });
-        selectedPlan = ''; // 重置已选套餐
+        selectedPlan = ''; // reset plam status
     }
         
         }
@@ -276,7 +276,7 @@
             }
 
 
-            // ====== 调试模式直接跳过后端验证 ======
+            // ====== DEBUG MODE ======
              if (DEBUG_MODE) {
              currentRoom = roomNumber;
              document.getElementById('current-room').textContent = roomNumber;
@@ -304,7 +304,7 @@
             if (data.status === 'success') {
                 currentRoom = roomNumber;
 
-            // 计算剩余流量
+            // compute remain quota
                 const quota = data.quota || 0;
                 const used = data.used_traffic || 0;
                 const remaining = Math.max(quota - used, 0);
@@ -319,7 +319,7 @@
 
 
 function calculatePrice(gb) {
-    let price = gb * 0.5;       // 基础价格
+    let price = gb * 0.5;       // price
     if (gb >= 20) price *= 0.7; // 20G及以上 7折
     else if (gb >= 10) price *= 0.8; // 10G及以上 8折
     return price;

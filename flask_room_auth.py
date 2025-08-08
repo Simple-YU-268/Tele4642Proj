@@ -9,11 +9,11 @@ import re
 app = Flask(__name__)
 CORS(app)
 
-# 配置文件
+# config
 ROOM_AUTH_FILE = 'room_auth.json'
 USER_DATA_FILE = 'user_data.json'
 
-# 初始化数据文件
+# initialize
 if not os.path.exists(ROOM_AUTH_FILE):
     with open(ROOM_AUTH_FILE, 'w') as f:
         json.dump({
@@ -37,7 +37,7 @@ if not os.path.exists(USER_DATA_FILE):
             "sessions": {}
         }, f, indent=2)
 
-# 加载房间认证数据
+# load room auth data（ini）
 def load_room_auth():
     try:
         with open(ROOM_AUTH_FILE, 'r') as f:
@@ -55,7 +55,7 @@ def load_room_auth():
             "303": "0000"
         }
 
-# 加载用户数据
+# load user data from json
 def load_user_data():
     try:
         with open(USER_DATA_FILE, 'r') as f:
@@ -63,17 +63,17 @@ def load_user_data():
     except:
         return {"users": {}, "sessions": {}}
 
-# 保存用户数据
+# save user data to json
 def save_user_data(data):
     with open(USER_DATA_FILE, 'w') as f:
         json.dump(data, f, indent=2)
 
-# SDN控制器地址
+# SDN controller address
 RYU_CONTROLLER_URL = 'http://127.0.0.1:8080'
 
 @app.route('/room_login', methods=['POST'])
 def room_login():
-    """房间号+手机号后四位登录"""
+    """room number + phone number login"""
     try:
         data = request.json
         room_number = data.get('room_number')
@@ -87,7 +87,7 @@ def room_login():
         if room_number in room_auth and room_auth[room_number] == phone_last4:
             user_data = load_user_data()
             
-            # 初始化用户数据
+            # initialize
             if room_number not in user_data['users']:
                 user_data['users'][room_number] = {
                     'quota': 0,
@@ -96,7 +96,7 @@ def room_login():
 
                 }
             
-            # 创建会话
+            # create
             session_id = f"{room_number}_{phone_last4}"
             user_data['sessions'][session_id] = {
                 'room_number': room_number,

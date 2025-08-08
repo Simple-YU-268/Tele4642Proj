@@ -19,11 +19,11 @@
       
         .header {
     display: flex;
-    align-items: center;      /* logo 与文字垂直对齐 */
+    align-items: center;      /* logo  */
     background-color: #000000;
     color: #FFC72C;
-    padding-top: 5px;   /* 改小上间距 */
-    padding-bottom: 0px; /* 保持下间距不变 */
+    padding-top: 5px;   
+    padding-bottom: 0px; 
     padding-left: 20px;
     padding-right: 20px;
     font-size: 24px;
@@ -33,13 +33,13 @@
 .logo {
     width: 60px;
     height: auto;
-    margin-right: 15px;       /* logo 与文字的间距 */
+    margin-right: 15px;       /* logo and text */
 }
 
 .title-text {
     display: flex;
-    flex-direction: column;   /* 文字上下排列 */
-    justify-content: center;  /* 垂直居中 */
+    flex-direction: column;   /* text */
+    justify-content: center;  /* middle */
 }
 
 .title-text h1 {
@@ -62,7 +62,7 @@
         }
         .nav button:hover, 
 .nav button:focus {
-    background-color: #E0AC00;   /* 深黄 */
+    background-color: #E0AC00;   
 }
         .nav button.active { background: #DA291C; color: #ffffff;}
         .content { padding: 30px; }
@@ -452,11 +452,11 @@
                  alert(result.message);
 
                  if (result.status === 'success') {
-                    // ✅ 只刷新房间表格，不跳转 Dashboard
+                    // 
                      loadRooms();
                      loadDashboard(); 
                 
-                    // location.reload(); // 刷新页面以显示最新状态
+                    // location.reload(); // refresh the page
                  }
              } catch (error) {
                  alert('Error deleting room: ' + error.message);
@@ -505,7 +505,7 @@
         autoRefreshEnabled.devices = document.getElementById('auto-refresh-devices')?.checked || false;
     }
 
-    // 每1秒检查是否需要刷新
+    // check every 1s to refresh
     setInterval(() => {
         if (autoRefreshEnabled.rooms && document.getElementById('rooms').classList.contains('active')) {
             loadRooms();
@@ -515,18 +515,6 @@
         }
     }, 1000);
 
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     </script>
 </body>
 </html>
