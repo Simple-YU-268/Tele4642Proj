@@ -76,34 +76,33 @@ class QuotaManager:
         return False
     
     def updateUserTraffic(self, mac_address, bytes_count):
-        """更新用户流量使用并检查配额状态"""
+        """updateUserTraffic"""
         user_data = self.loadUserData()
         flow_update_needed = False
         
         for room_number, user_info in user_data.get('users', {}).items():
             if mac_address in user_info.get('devices', []):
                 if user_info.get('reset', False):
-                    self.logger.info("跳过房间%s设备%s的一次流量更新（刚重置）", room_number, mac_address)
-                    user_info['reset'] = False  # ✅ 清除标志
+                    self.logger.info("Skip a traffic update for room %s device %s (just reset)", room_number, mac_address)
+                    user_info['reset'] = False  # reset flag from json file
                     self.saveUserData(user_data)
                     return True
                 current_used = user_info.get('used_traffic', 0)
                 user_info['used_traffic'] = current_used + bytes_count
                 
-                # 检查配额是否用完
+                # check remaining =or!= 0
                 quota = user_info.get('quota', 0)
                 used = user_info.get('used_traffic', 0)
                 remaining = quota - used
                 
                 if remaining <= 0 and remaining + bytes_count > 0:
-                    # 配额从有到无，需要更新流表
-                    self.logger.warning("⚠️ 房间%s设备%s配额已用完: %.1fGB/%.1fGB", 
+                    # quota 0->1, update flow
+                    self.logger.warning("⚠️ room%s device %s quota is used up: %.1fGB/%.1fGB", 
                                       room_number, mac_address, 
                                       used / (1024**3), quota / (1024**3))
                     flow_update_needed = True
                 self.saveUserData(user_data)
                 
-                # 如果需要更新流表
                 if flow_update_needed:
                     self._triggerFlowUpdate()
                 
@@ -112,21 +111,21 @@ class QuotaManager:
         return False
     
     def resetDeviceTraffic(self, mac_address):
-        """重置设备流量使用"""
+        """reset used_traffic"""
         user_data = self.loadUserData()
         
         for room_number, user_info in user_data.get('users', {}).items():
             if mac_address in user_info.get('devices', []):
                 user_info['used_traffic'] = 0
-                user_info['reset'] = True  # ✅ 设置跳过标志
+                user_info['reset'] = True
                 self.saveUserData(user_data)
-                self.logger.info("重置房间%s设备%s的流量使用", room_number, mac_address)
+                self.logger.info("reset room %s device %s used_traffic", room_number, mac_address)
                 return True
         
         return False
     
     def getQuotaStatus(self):
-        """获取所有设备的配额状态"""
+        """get all quota status"""
         user_data = self.loadUserData()
         status = {}
         
@@ -147,9 +146,9 @@ class QuotaManager:
         return status
     
     def _triggerFlowUpdate(self):
-        """触发流表更新"""
-        # 这里需要获取当前连接的交换机并更新流表
-        # 由于无法直接获取交换机列表，我们记录日志
-        self.logger.info("🔄 配额状态变化，需要更新流表")
-        # 在实际应用中，这里应该调用flowManager.updateQuotaBasedFlows
-        # 但需要通过控制器获取当前连接的交换机
+        """update flow"""
+        # Here, it is necessary to obtain the currently connected switch and update the flow table
+        # Since we cannot directly obtain the list of switches, we record logs
+        self.logger.info("quota changed, need update flow")
+        # In practical applications, flowManager.updateQuotaBasedFlows should be called here
+        # However, the currently connected switch needs to be obtained through the controller
